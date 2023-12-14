@@ -19,7 +19,7 @@ def _joblet_format(instance, job, width=74, jobid_type='agg'):
         joblet_repr += ' '
         loffset = 0
         if instance.show_prio:
-            joblet_repr += '(' + _format_to(job.priority, 6) + ')'
+            joblet_repr += '(' + _format_to(job.priority, len(str(job.priority))) + ')'
             joblet_repr += ' '
             loffset += 9
         if instance.show_account:
@@ -57,10 +57,18 @@ def _joblet_format(instance, job, width=74, jobid_type='agg'):
 
 STYLE_MAPPING = {'R': None, 'S': 'MAGENTA', 'PD': 'YELLOW', 'CG': 'MAGENTA'}
 
+
 def dev_sort_key(x):
     return (x.user,
-     x.jobid.split('_')[0],
-     int(x.jobid.split('_')[1]) if '_' in x.jobid and '[' not in x.jobid else (999 if '[' in x.jobid else 0))
+            x.jobid.split('_')[0],
+            int(x.jobid.split('_')[1]) if '_' in x.jobid and '[' not in x.jobid else (999 if '[' in x.jobid else 0))
+
+
+def prod_sort_key(x, instance):
+    return ((x.user if not instance.sort_by_prio else -x.priority,
+             x.jobid.split('_')[0],
+             int(x.jobid.split('_')[1]) if '_' in x.jobid and '[' not in x.jobid else (999 if '[' in x.jobid else 0)))
+
 
 def view_list(instance, jobs, filter=None, work=True, stylefn=cmdstyle, current_user=None, width=74, jit='agg'):
     # this is for hot reload
@@ -106,14 +114,15 @@ def view_list(instance, jobs, filter=None, work=True, stylefn=cmdstyle, current_
         RetScope.return_string += (thing if style is None else stylefn(style, thing)) + '\n'
 
     devjobs = sorted([x for x in jobs_to_print if is_dev(x)], key=lambda x: dev_sort_key(x))
+
     for state in STYLE_MAPPING:
         for x in devjobs:
             if x.state == state:
                 cust_print(_joblet_format(instance, x, width=width, jobid_type=jit), style=STYLE_MAPPING[x.state])
 
     cust_print('─' * ((width - 72) // 2) + midlane + '─' * (width - 72 - ((width - 72) // 2)))
-    prodjobs = sorted([x for x in jobs_to_print if not is_dev(x)], key=lambda x: (x.user if not instance.sort_by_prio else -x.priority,
-                      x.jobid.split('_')[0], int(x.jobid.split('_')[1]) if '_' in x.jobid and '[' not in x.jobid else (999 if '[' in x.jobid else 0)))
+
+    prodjobs = sorted([x for x in jobs_to_print if not is_dev(x)], key=lambda x: prod_sort_key(x, instance))
 
     for state in STYLE_MAPPING:
         for x in prodjobs:

@@ -42,7 +42,7 @@ flip = ''' ⣰⣾⣿⣿⣿⠿⠿⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿
  ⣿⣿⣦⣄⣈⣉⣉⣉⣡⣤⣶⣿⣿⣿⣿⣿⣿⣿⣿⠉⠁⣀⣼⣿⣿⣿
  ⠻⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣶⣾⣿⣿⡿⠟
     '''
-chunga= '''⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣧⠀⠀⠀⠀⠀⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+chunga = '''⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣧⠀⠀⠀⠀⠀⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣧⠀⠀⠀⢰⡿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⡟⡆⠀⠀⣿⡇⢻⠀⠀⠀⠀⠀⠀⠀⠀⠀
 ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⠀⣿⠀⢰⣿⡇⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -80,31 +80,32 @@ gpu_box_chars = 16
 
 mem_size = 16
 mem_unit = 'ᴳ'
-ram_occ = '█' # '▄'#
+ram_occ = '█'  # '▄'#
 ram_occ_alt = '▀'
 ram_avail = '░'
 ram_drain = '△'
-ram_pendr ='⧖'
+ram_pendr = '⧖'
 ram_paused = '▚'
 ram_down = '⨯'
 
 cpu_size = 4
 cpu_unit = 'ᶜᵖᵘ'
-cpu_occ = '█' # '▄'#
+cpu_occ = '█'  # '▄'#
 cpu_occ_alt = '▀'
 cpu_avail = '░'
 cpu_half = '▌'
 cpu_drain = '△'
-cpu_pendr ='⧖'
+cpu_pendr = '⧖'
 cpu_paused = '▚'
 cpu_down = '⨯'
 
 
 def get_ram_block(megs):
-    return int(round(megs/1024/mem_size))
+    return int(round(megs / 1024 / mem_size))
+
 
 def get_cpu_block(cpus):
-    return cpus//cpu_size
+    return cpus // cpu_size
 
 
 def view_viz(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None, mode='gpu'):
@@ -114,6 +115,7 @@ def view_viz(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=Non
         return view_viz_ram(infrastructure, jobs, work, stylefn, current_user)
     elif mode == 'cpu':
         return view_viz_cpu(infrastructure, jobs, work, stylefn, current_user)
+
 
 def view_viz_ram(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
     # this is for hot reload
@@ -130,14 +132,16 @@ def view_viz_ram(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
 
     class RetScope:
         return_string = ''
+
     def cust_print(thing, style=None):
-        RetScope.return_string += (thing if style is None else stylefn(style,thing)) + '\n'
+        RetScope.return_string += (thing if style is None else stylefn(style, thing)) + '\n'
 
     if not infrast_down:
         highlighted_users = [current_user]
-        highlighted_users += pd.DataFrame([(j.user, sum([get_ram_block(x.mem) for x in j.joblets])) for j in jobs if j.user != current_user and j.state in ('R', 'S')]).groupby(0).sum()[1].sort_values(ascending=False).iloc[:3].index.to_list()
+        highlighted_users += pd.DataFrame([(j.user, sum([get_ram_block(x.mem) for x in j.joblets])) for j in jobs if j.user !=
+                                          current_user and j.state in ('R', 'S')]).groupby(0).sum()[1].sort_values(ascending=False).iloc[:3].index.to_list()
 
-        user_styles = dict(zip(highlighted_users, ['RED','YELLOW','GREEN','MAGENTA','BLUE']))
+        user_styles = dict(zip(highlighted_users, ['RED', 'YELLOW', 'GREEN', 'MAGENTA', 'BLUE']))
         students = [j.user for j in jobs if is_student_viz(j)]
         for s in students:
             user_styles[s] = 'CYAN'
@@ -180,7 +184,7 @@ def view_viz_ram(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
             # if count < gpu_box_chars:
             jobsplit[-1] += f'{to_font(int((n.mem-occs) / 1024))}'
 
-            for i,l in enumerate(jobsplit):
+            for i, l in enumerate(jobsplit):
                 RetScope.return_string += f'{_format_to(n.name if i == 0 else "", gpu_name_chars, "right")}{"(" if n.reserved == "yes" and i == 0 else " "}{l}{")" if n.reserved == "yes" and i == (len(jobsplit) - 1) else ""}\n'
 
         # verify maintenance status
@@ -192,43 +196,40 @@ def view_viz_ram(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
         elif len(infrastructure.maintenances):
             cust_print('  ◀ MAINTENANCE  in %4s ▶    ' % waitString, 'BG_MAGENTA')
         elif len(jobs) == 0:
-            cust_print('         ◀ NO  JOBS ▶         ','BG_GREEN')
+            cust_print('         ◀ NO  JOBS ▶         ', 'BG_GREEN')
         elif stalled_jobs / len(jobs) > 0.5:
-            cust_print('       ◀ JOBS ON HOLD ▶       ','BG_YELLOW')
+            cust_print('       ◀ JOBS ON HOLD ▶       ', 'BG_YELLOW')
         else:
             cust_print('')
 
-        # print summary
-        # cust_print(''.join([' ['+ ram_occ + 'run', paused + 'hld', drain + 'drn', down + 'dwn', '()res]']))
-        cust_print(''.join(['['+ ram_occ + f'{mem_size}{mem_unit}', ram_paused + 'hld', ram_drain + 'drn', ram_pendr + 'pnd',  ram_down + 'dwn', '()res]']))
+        cust_print(''.join(['[' + ram_occ + f'{mem_size}{mem_unit}', ram_paused + 'hld', ram_drain + 'drn', ram_pendr + 'pnd', ram_down + 'dwn', '()res]']))
         gpuc = 'GREEN'
-        # if infrastructure.gpu_limit_pu > 3:
-        #     gpuc = 'YELLOW'
-        # if infrastructure.gpu_limit_pu > 6:
-        #     gpuc = 'GREEN'
-        cust_print(' '.join(["  ram:", stylefn(gpuc,(f"{int(round(infrastructure.ram_limit_pu / 1024)):4d}{mem_unit}")
-            if not pd.isna(infrastructure.ram_limit_pu) else " ∞"),
-            " grp:", stylefn(gpuc,f"{total_jobs_prod:4d}{mem_unit}/{int(round(infrastructure.ram_limit_grp / 1024))}{mem_unit}"
-            if not pd.isna(infrastructure.ram_limit_grp) else " ∞")]))
-        cust_print(' '.join([" Sram:", stylefn('CYAN',(f"{int(round(infrastructure.ram_limit_stu / 1024)):4d}{mem_unit}")
-            if not pd.isna(infrastructure.ram_limit_stu) else " ∞"),
-            "Sgrp:", stylefn('CYAN',f"{total_jobs_stud:4d}{mem_unit}/{int(round(infrastructure.ram_limit_stugrp / 1024))}{mem_unit}"
-            if not pd.isna(infrastructure.ram_limit_stugrp) else " ∞")]))
+
+        cust_print(' '.join(["  ram:", stylefn(gpuc, (f"{int(round(infrastructure.ram_limit_pu / 1024)):4d}{mem_unit}")
+                                               if not pd.isna(infrastructure.ram_limit_pu) else " ∞"),
+                             " grp:", stylefn(gpuc, f"{total_jobs_prod:4d}{mem_unit}/{int(round(infrastructure.ram_limit_grp / 1024))}{mem_unit}"
+                                              if not pd.isna(infrastructure.ram_limit_grp) else " ∞")]))
+        cust_print(' '.join([" Sram:", stylefn('CYAN', (f"{int(round(infrastructure.ram_limit_stu / 1024)):4d}{mem_unit}")
+                                               if not pd.isna(infrastructure.ram_limit_stu) else " ∞"),
+                             "Sgrp:", stylefn('CYAN', f"{total_jobs_stud:4d}{mem_unit}/{int(round(infrastructure.ram_limit_stugrp / 1024))}{mem_unit}"
+                                              if not pd.isna(infrastructure.ram_limit_stugrp) else " ∞")]))
 
         # print user list
         for u, c in user_styles.items():
             if c in ('CYAN', 'BLUE'):
                 continue
-            cust_print(f" {stylefn(c, gpu_occ)} {stylefn('CYAN', u) if any(['stu' in j.partition for j in jobs if j.user == u]) else u} ({int(round(sum([sum([jj.mem / 1024 for jj in j.joblets if jj.node is not None]) for j in jobs if j.user == u])))}{mem_unit})")
+            cust_print(
+                f" {stylefn(c, gpu_occ)} {stylefn('CYAN', u) if any(['stu' in j.partition for j in jobs if j.user == u]) else u} ({int(round(sum([sum([jj.mem / 1024 for jj in j.joblets if jj.node is not None]) for j in jobs if j.user == u])))}{mem_unit})")
         cust_print(f" {stylefn('CYAN', gpu_occ)} {stylefn('CYAN', 'students')}")
         cust_print(f" {stylefn('BLUE', gpu_occ)} {stylefn('BLUE', 'cvcs/ai4a')}")
 
-    else: # if infrastrcture_down
+    else:  # if infrastrcture_down
         # print emergency screen
         cust_print('  ◀ INFRASTRUCTURE IS DOWN ▶  ', 'BG_RED')
         cust_print(random.choice([flip, chunga, ogre]), 'GREEN')
 
     return RetScope.return_string
+
 
 def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
     # this is for hot reload
@@ -245,14 +246,16 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
 
     class RetScope:
         return_string = ''
+
     def cust_print(thing, style=None):
-        RetScope.return_string += (thing if style is None else stylefn(style,thing)) + '\n'
+        RetScope.return_string += (thing if style is None else stylefn(style, thing)) + '\n'
 
     if not infrast_down:
         highlighted_users = [current_user]
-        highlighted_users += pd.DataFrame([(j.user, sum([x.n_gpus for x in j.joblets])) for j in jobs if j.user != current_user and j.state in ('R', 'S')]).groupby(0).sum()[1].sort_values(ascending=False).iloc[:3].index.to_list()
+        highlighted_users += pd.DataFrame([(j.user, sum([x.n_gpus for x in j.joblets])) for j in jobs if j.user != current_user and j.state in ('R', 'S')]
+                                          ).groupby(0).sum()[1].sort_values(ascending=False).iloc[:3].index.to_list()
 
-        user_styles = dict(zip(highlighted_users, ['RED','YELLOW','GREEN','MAGENTA','BLUE']))
+        user_styles = dict(zip(highlighted_users, ['RED', 'YELLOW', 'GREEN', 'MAGENTA', 'BLUE']))
         students = [j.user for j in jobs if is_student_viz(j)]
         for s in students:
             user_styles[s] = 'CYAN'
@@ -280,11 +283,11 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
                             total_jobs_prod += jj.n_gpus
                         occs += jj.n_gpus
                         icon = gpu_paused if j.state == 'S' else gpu_occ
-                        st = icon + (('+' if len(j.joblets) > 1 else '-') + icon) * (jj.n_gpus-1)
+                        st = icon + (('+' if len(j.joblets) > 1 else '-') + icon) * (jj.n_gpus - 1)
                         joblet_icons.append((st, user_styles[j.user] if j.user in user_styles else None))
             joblet_icons += [(gpu_drain if n.status == 'drain' else (gpu_down if n.status == 'down' else (gpu_pendr if n.reserved == 'pending' else gpu_avail)), None)] * (n.n_gpus - occs)
 
-            joblet_icons = [(ji[0] + (' ' if i != len(joblet_icons)-1 else ''), ji[1]) for i, ji in enumerate(joblet_icons)]
+            joblet_icons = [(ji[0] + (' ' if i != len(joblet_icons) - 1 else ''), ji[1]) for i, ji in enumerate(joblet_icons)]
 
             jobsplit = [""]
             count = 0
@@ -296,7 +299,7 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
                     jobsplit[-1] += stylefn(c, i) if c is not None else i
                     count += 1
 
-            for i,l in enumerate(jobsplit):
+            for i, l in enumerate(jobsplit):
                 RetScope.return_string += f'{_format_to(n.name if i == 0 else "", gpu_name_chars, "right")}{"(" if n.reserved == "yes" and i == 0 else " "}{l}{")" if n.reserved == "yes" and i == (len(jobsplit) - 1) else ""}\n'
 
         # verify maintenance status
@@ -308,31 +311,34 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
         elif len(infrastructure.maintenances):
             cust_print('  ◀ MAINTENANCE  in %4s ▶    ' % waitString, 'BG_MAGENTA')
         elif len(jobs) == 0:
-            cust_print('         ◀ NO  JOBS ▶         ','BG_GREEN')
+            cust_print('         ◀ NO  JOBS ▶         ', 'BG_GREEN')
         elif stalled_jobs / len(jobs) > 0.5:
-            cust_print('       ◀ JOBS ON HOLD ▶       ','BG_YELLOW')
+            cust_print('       ◀ JOBS ON HOLD ▶       ', 'BG_YELLOW')
         else:
             cust_print('')
 
         # print summary
-        cust_print(''.join([' ['+ gpu_occ + 'run', gpu_paused + 'hld', gpu_drain + 'drn', gpu_pendr + 'pnd', gpu_down + 'dwn', '()res]']))
+        cust_print(''.join([' [' + gpu_occ + 'run', gpu_paused + 'hld', gpu_drain + 'drn', gpu_pendr + 'pnd', gpu_down + 'dwn', '()res]']))
         gpuc = 'RED'
         if infrastructure.gpu_limit_pu > 3:
             gpuc = 'YELLOW'
         if infrastructure.gpu_limit_pu > 6:
             gpuc = 'GREEN'
-        cust_print(' '.join(["      gpu:", stylefn(gpuc,("%2d" % infrastructure.gpu_limit_pu) if not pd.isna(infrastructure.gpu_limit_pu) else " ∞"), " grp:", stylefn(gpuc,"%2d/%s") % (total_jobs_prod, ("%2d" % infrastructure.gpu_limit_grp) if not pd.isna(infrastructure.gpu_limit_grp) else " ∞")]))
-        cust_print(' '.join(["     Sgpu:", stylefn('CYAN',("%2d" % infrastructure.gpu_limit_stu) if not pd.isna(infrastructure.gpu_limit_stu) else " ∞"), "Sgrp:", stylefn('CYAN',"%2d/%s") % (total_jobs_stud, ("%2d" % infrastructure.gpu_limit_stugrp) if not pd.isna(infrastructure.gpu_limit_stugrp) else " ∞")]))
+        cust_print(' '.join(["      gpu:", stylefn(gpuc, ("%2d" % infrastructure.gpu_limit_pu) if not pd.isna(infrastructure.gpu_limit_pu) else " ∞"), " grp:",
+                   stylefn(gpuc, "%2d/%s") % (total_jobs_prod, ("%2d" % infrastructure.gpu_limit_grp) if not pd.isna(infrastructure.gpu_limit_grp) else " ∞")]))
+        cust_print(' '.join(["     Sgpu:", stylefn('CYAN', ("%2d" % infrastructure.gpu_limit_stu) if not pd.isna(infrastructure.gpu_limit_stu) else " ∞"), "Sgrp:",
+                   stylefn('CYAN', "%2d/%s") % (total_jobs_stud, ("%2d" % infrastructure.gpu_limit_stugrp) if not pd.isna(infrastructure.gpu_limit_stugrp) else " ∞")]))
 
         # print user list
         for u, c in user_styles.items():
             if c in ('CYAN', 'BLUE'):
                 continue
-            cust_print(f" {stylefn(c, gpu_occ)} {stylefn('CYAN', u) if any(['stu' in j.partition for j in jobs if j.user == u]) else u} ({sum([sum([jj.n_gpus for jj in j.joblets if jj.node is not None]) for j in jobs if j.user == u])})")
+            cust_print(
+                f" {stylefn(c, gpu_occ)} {stylefn('CYAN', u) if any(['stu' in j.partition for j in jobs if j.user == u]) else u} ({sum([sum([jj.n_gpus for jj in j.joblets if jj.node is not None]) for j in jobs if j.user == u])})")
         cust_print(f" {stylefn('CYAN', gpu_occ)} {stylefn('CYAN', 'students')} ({sum([sum([jj.n_gpus for jj in j.joblets if jj.node is not None]) for j in jobs if is_student_viz(j)])})")
         cust_print(f" {stylefn('BLUE', gpu_occ)} {stylefn('BLUE', 'cvcs/ai4a')} ({sum([sum([jj.n_gpus for jj in j.joblets if jj.node is not None]) for j in jobs if is_cvcs_viz(j)])})")
 
-    else: # if infrastrcture_down
+    else:  # if infrastrcture_down
         # print emergency screen
         cust_print('  ◀ INFRASTRUCTURE IS DOWN ▶  ', 'BG_RED')
         cust_print(random.choice([flip, chunga, ogre]), 'GREEN')
@@ -342,10 +348,11 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
 
 def get_cpu_icon(stat):
     return {
-    'drain': cpu_drain,
-    'down': cpu_down,
-    'pending': cpu_pendr,
-        }.get(stat, cpu_avail)
+        'drain': cpu_drain,
+        'down': cpu_down,
+        'pending': cpu_pendr,
+    }.get(stat, cpu_avail)
+
 
 def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
     # this is for hot reload
@@ -362,14 +369,16 @@ def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
 
     class RetScope:
         return_string = ''
+
     def cust_print(thing, style=None):
-        RetScope.return_string += (thing if style is None else stylefn(style,thing)) + '\n'
+        RetScope.return_string += (thing if style is None else stylefn(style, thing)) + '\n'
 
     if not infrast_down:
         highlighted_users = [current_user]
-        highlighted_users += pd.DataFrame([(j.user, sum([x.cpus for x in j.joblets])) for j in jobs if j.user != current_user and j.state in ('R', 'S')]).groupby(0).sum()[1].sort_values(ascending=False).iloc[:3].index.to_list()
+        highlighted_users += pd.DataFrame([(j.user, sum([x.cpus for x in j.joblets])) for j in jobs if j.user != current_user and j.state in ('R', 'S')]
+                                          ).groupby(0).sum()[1].sort_values(ascending=False).iloc[:3].index.to_list()
 
-        user_styles = dict(zip(highlighted_users, ['RED','YELLOW','GREEN','MAGENTA','BLUE']))
+        user_styles = dict(zip(highlighted_users, ['RED', 'YELLOW', 'GREEN', 'MAGENTA', 'BLUE']))
         students = [j.user for j in jobs if is_student_viz(j)]
         for s in students:
             user_styles[s] = 'CYAN'
@@ -419,7 +428,7 @@ def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
             # if count < gpu_box_chars:
             jobsplit[-1] += f'{to_font(n.cpus-occs)}/{to_font(n.cpus)}'
 
-            for i,l in enumerate(jobsplit):
+            for i, l in enumerate(jobsplit):
                 RetScope.return_string += f'{_format_to(n.name if i == 0 else "", gpu_name_chars, "right")}{"(" if n.reserved == "yes" and i == 0 else " "}{l}{")" if n.reserved == "yes" and i == (len(jobsplit) - 1) else ""}\n'
 
         # verify maintenance status
@@ -431,38 +440,39 @@ def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
         elif len(infrastructure.maintenances):
             cust_print('  ◀ MAINTENANCE  in %4s ▶    ' % waitString, 'BG_MAGENTA')
         elif len(jobs) == 0:
-            cust_print('         ◀ NO  JOBS ▶         ','BG_GREEN')
+            cust_print('         ◀ NO  JOBS ▶         ', 'BG_GREEN')
         elif stalled_jobs / len(jobs) > 0.5:
-            cust_print('       ◀ JOBS ON HOLD ▶       ','BG_YELLOW')
+            cust_print('       ◀ JOBS ON HOLD ▶       ', 'BG_YELLOW')
         else:
             cust_print('')
 
         # print summary
         # cust_print(''.join([' ['+ ram_occ + 'run', paused + 'hld', drain + 'drn', down + 'dwn', '()res]']))
-        cust_print(''.join(['['+ ram_occ + f'{cpu_size}{cpu_unit}', cpu_paused + 'hld', cpu_drain + 'drn', cpu_pendr + 'pnd',  cpu_down + 'dwn', '()res]']))
+        cust_print(''.join(['[' + ram_occ + f'{cpu_size}{cpu_unit}', cpu_paused + 'hld', cpu_drain + 'drn', cpu_pendr + 'pnd', cpu_down + 'dwn', '()res]']))
         gpuc = 'GREEN'
         # if infrastructure.gpu_limit_pu > 3:
         #     gpuc = 'YELLOW'
         # if infrastructure.gpu_limit_pu > 6:
         #     gpuc = 'GREEN'
-        cust_print(' '.join(["  cpu:", stylefn(gpuc,(f"{int(round(infrastructure.cpu_limit_pu)):4d}{cpu_size}")
-            if not pd.isna(infrastructure.cpu_limit_pu) else " ∞"),
-            " grp:", stylefn(gpuc,f"{total_jobs_prod:4d}{cpu_size}/{int(round(infrastructure.cpu_limit_grp))}{cpu_size}"
-            if not pd.isna(infrastructure.cpu_limit_grp) else " ∞ ")]))
-        cust_print(' '.join([" Scpu:", stylefn('CYAN',(f"{int(round(infrastructure.cpu_limit_stu)):4d}{cpu_size}")
-            if not pd.isna(infrastructure.cpu_limit_stu) else " ∞"),
-            "Sgrp:", stylefn('CYAN',f"{total_jobs_stud:4d}{cpu_size}/{int(round(infrastructure.cpu_limit_stugrp))}{cpu_size}"
-            if not pd.isna(infrastructure.cpu_limit_stugrp) else " ∞ ")]))
+        cust_print(' '.join(["  cpu:", stylefn(gpuc, (f"{int(round(infrastructure.cpu_limit_pu)):4d}{cpu_size}")
+                                               if not pd.isna(infrastructure.cpu_limit_pu) else " ∞"),
+                             " grp:", stylefn(gpuc, f"{total_jobs_prod:4d}{cpu_size}/{int(round(infrastructure.cpu_limit_grp))}{cpu_size}"
+                                              if not pd.isna(infrastructure.cpu_limit_grp) else " ∞ ")]))
+        cust_print(' '.join([" Scpu:", stylefn('CYAN', (f"{int(round(infrastructure.cpu_limit_stu)):4d}{cpu_size}")
+                                               if not pd.isna(infrastructure.cpu_limit_stu) else " ∞"),
+                             "Sgrp:", stylefn('CYAN', f"{total_jobs_stud:4d}{cpu_size}/{int(round(infrastructure.cpu_limit_stugrp))}{cpu_size}"
+                                              if not pd.isna(infrastructure.cpu_limit_stugrp) else " ∞ ")]))
 
         # print user list
         for u, c in user_styles.items():
             if c in ('CYAN', 'BLUE'):
                 continue
-            cust_print(f" {stylefn(c, gpu_occ)} {stylefn('CYAN', u) if any(['stu' in j.partition for j in jobs if j.user == u]) else u} ({sum([sum([jj.cpus for jj in j.joblets if jj.node is not None]) for j in jobs if j.user == u])}{cpu_unit})")
+            cust_print(
+                f" {stylefn(c, gpu_occ)} {stylefn('CYAN', u) if any(['stu' in j.partition for j in jobs if j.user == u]) else u} ({sum([sum([jj.cpus for jj in j.joblets if jj.node is not None]) for j in jobs if j.user == u])}{cpu_unit})")
         cust_print(f" {stylefn('CYAN', gpu_occ)} {stylefn('CYAN', 'students')}")
         cust_print(f" {stylefn('BLUE', gpu_occ)} {stylefn('BLUE', 'cvcs/ai4a')}")
 
-    else: # if infrastrcture_down
+    else:  # if infrastrcture_down
         # print emergency screen
         cust_print('  ◀ INFRASTRUCTURE IS DOWN ▶  ', 'BG_RED')
         cust_print(random.choice([flip, chunga, ogre]), 'GREEN')

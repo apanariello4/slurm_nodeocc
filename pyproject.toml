@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools >= 65.5.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nodeocc"
+version = "1.0.0"
+authors = [{ name = "Matteo Boschini" }]
+maintainers = [{ name = "Lorenzo Bonicelli" }, { name = "Aniello Panariello" }]
+description = "TUI application for viewing the status of GPU allocations on a Slurm cluster"
+readme = "README.md"
+requires-python = ">=3.9"
+keywords = [
+    "Slurm",
+    "GPU",
+    "TUI",
+    "CLI",
+    "HPC",
+    "cluster",
+    "allocations",
+    "nodeocc",
+]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console :: Curses",
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = ["pandas", "numpy"]
+
+[project.urls]
+Repository = "https://github.com/mbosc/slurm_nodeocc"
+
+[project.scripts]
+nodeocc = "controller.controller:_main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

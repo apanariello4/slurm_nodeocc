@@ -1,16 +1,17 @@
 import asyncio
-import os
-import grp
-from pathlib import Path
-import time
 import curses
+import grp
 import logging
-from logging.handlers import RotatingFileHandler
-import socket
-from view import update_views
-import traceback
-import threading
+import os
 import signal
+import socket
+import threading
+import time
+import traceback
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+from view import update_views
 
 a_filter_values = [None, 'me', 'prod', 'stud', 'cvcs']
 
@@ -346,10 +347,8 @@ def handle_keys(stdscr, instance):
         instance.voff -= 1
 
     if k == ord('S'):
-        # instance.sort_by_prio = not instance.sort_by_prio
-        pass
+        instance.sort_by_prio = not instance.sort_by_prio
     if k == ord('g'):
-        # instance.view_mode = "gpu" if instance.view_mode == "ram" else "ram"
         instance.view_mode = {"gpu": "ram", "ram": "cpu", "cpu": "gpu"}[instance.view_mode]
     if k == ord('j'):
         instance.job_id_type = "true" if instance.job_id_type == "agg" else "agg"

@@ -8,7 +8,7 @@ class Node:
     """
 
     def __init__(self, name, n_gpus, gpu_model, reserved, status, cpus, mem) -> None:
-        self.name = name.replace('ailb-login-02', '00') if name is not None else None
+        self.name = name
         self.n_gpus = n_gpus
         self.gpu_model = gpu_model
         self.reserved = reserved
@@ -67,7 +67,7 @@ class Infrastructure:
         self.cpu_limit_grp = cpu_limit_grp
         self.cpu_limit_stu = cpu_limit_stu
         self.cpu_limit_stugrp = cpu_limit_stugrp
-        self.prior = ['RTX6000', '2080', 'V100', 'RTX5000', '1080', 'P100', None, 'K80']
+        self.prior = ['RTX6000', '2080', 'V100', 'RTXA5000', 'RTX5000', '1080', 'P100', 'n/a', None, 'K80']
 
     @staticmethod
     def from_dict(d):

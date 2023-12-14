@@ -25,6 +25,33 @@ import traceback
 from model.infrastructure import Infrastructure
 from model.job import Job
 import asyncio
+import importlib.metadata
+
+program_name = 'nodeocc'
+version_number = importlib.metadata.version(program_name)
+
+# get newest version from pip
+try:
+    url = "https://pypi.python.org/pypi/nodeocc/json"
+    import requests
+    newest_version = json.loads(requests.get(url).text)['info']['version']
+    if newest_version.split('.')[0] > version_number.split('.')[0]:
+        print(f"New major version available: {newest_version} (current: {version_number})")
+        for _ in range(5):
+            print('.', end='')
+            time.sleep(0.5)
+    elif newest_version.split('.')[1] > version_number.split('.')[1]:
+        print(f"New minor version available: {newest_version} (current: {version_number})")
+        for _ in range(3):
+            print('.', end='')
+            time.sleep(0.5)
+    elif newest_version.split('.')[2] > version_number.split('.')[2]:
+        print(f"New patch version available: {newest_version} (current: {version_number})")
+        time.sleep(0.5)
+except Exception as e:
+    print(f"Could not get newest version from pip, check if {program_name} is up to date")
+    time.sleep(1)
+
 
 BEGIN_DELIM = "!{$"
 END_DELIM_ENCODED = "!}$".encode('utf-8')
@@ -52,9 +79,6 @@ if os.path.getmtime(conf_path + "/view/styles.py") > last_update:
     last_update = os.path.getmtime(conf_path + "/view/styles.py")
 if os.path.getmtime(conf_path + "/readers/slurmreader.py") > last_update:
     last_update = os.path.getmtime(conf_path + "/readers/slurmreader.py")
-
-program_name = "nodocc"
-version_number = 1.00
 
 
 def get_avg_wait_time(instance: Singleton):
@@ -191,7 +215,7 @@ def display_main(stdscr):
     return asyncio.run(main(stdscr))
 
 
-if __name__ == '__main__':
+def _main():
     if args.daemon_only:
         assert args.master, "Daemon mode only available for master"
         instance = Singleton.getInstance()
@@ -221,7 +245,11 @@ if __name__ == '__main__':
     else:
         # configure singleton
 
-        Singleton.getInstance().signature = f"{program_name} v{version_number:.2f}"
+        Singleton.getInstance().signature = f"{program_name} v{version_number}"
         Singleton.getInstance().fetch_fn = get_all
 
         wrapper(display_main)
+
+
+if __name__ == '__main__':
+    _main()
