@@ -459,8 +459,8 @@ def update_screen(stdscr, instance):
     # get slurm user partition
     stdscr.addstr(lines - 1, xoffset + 62 + 2, f'(Avg time {instance.avg_wait_time})', curses.color_pair(2))
 
-    signature = instance.signature
-    stdscr.addstr(lines - 1, columns - 2 - len(signature), signature)
+    signature = instance.signature if instance.updated else f'{instance.version} -> {instance.newest_version}'
+    stdscr.addstr(lines - 1, columns - 2 - len(signature), signature, curses.color_pair(2) if instance.updated else curses.color_pair(3))
 
     stdscr.refresh()
     curses.doupdate()

@@ -29,28 +29,35 @@ import importlib.metadata
 
 program_name = 'nodeocc'
 version_number = importlib.metadata.version(program_name)
+updated = False
 
-# get newest version from pip
+BBLUE = '\033[1;34m'
+END = '\033[0m'
 try:
     url = "https://pypi.python.org/pypi/nodeocc/json"
     import requests
     newest_version = json.loads(requests.get(url).text)['info']['version']
+    print(BBLUE, end='')
     if newest_version.split('.')[0] > version_number.split('.')[0]:
         print(f"New major version available: {newest_version} (current: {version_number})")
-        for _ in range(5):
-            print('.', end='')
-            time.sleep(0.5)
+        print(f"Please update with 'pip install {program_name} --upgrade'")
+        time.sleep(7)
     elif newest_version.split('.')[1] > version_number.split('.')[1]:
         print(f"New minor version available: {newest_version} (current: {version_number})")
-        for _ in range(3):
-            print('.', end='')
-            time.sleep(0.5)
+        print(f"Please update with 'pip install {program_name} --upgrade'")
+        time.sleep(7)
     elif newest_version.split('.')[2] > version_number.split('.')[2]:
         print(f"New patch version available: {newest_version} (current: {version_number})")
-        time.sleep(0.5)
+        print(f"Please update with 'pip install {program_name} --upgrade'")
+        time.sleep(7)
+    else:
+        print(f"Up to date: {version_number}")
+        updated = True
+        time.sleep(3)
+    print(END, end='')
 except Exception as e:
-    print(f"Could not get newest version from pip, check if {program_name} is up to date")
-    time.sleep(1)
+    print(f"{BBLUE}Could not get newest version from pip, check if {program_name} is up to date{END}")
+    time.sleep(5)
 
 
 BEGIN_DELIM = "!{$"
@@ -246,6 +253,9 @@ def _main():
         # configure singleton
 
         Singleton.getInstance().signature = f"{program_name} v{version_number}"
+        Singleton.getInstance().version = version_number
+        Singleton.getInstance().updated = updated
+        Singleton.getInstance().newest_version = newest_version
         Singleton.getInstance().fetch_fn = get_all
 
         wrapper(display_main)

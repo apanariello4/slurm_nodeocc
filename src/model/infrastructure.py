@@ -67,7 +67,7 @@ class Infrastructure:
         self.cpu_limit_grp = cpu_limit_grp
         self.cpu_limit_stu = cpu_limit_stu
         self.cpu_limit_stugrp = cpu_limit_stugrp
-        self.prior = ['RTX6000', '2080', 'V100', 'RTXA5000', 'RTX5000', '1080', 'P100', 'n/a', None, 'K80']
+        self.prior = ['n/a', None, 'RTXA5000', 'RTX6000', 'RTX5000', '2080', 'V100', '1080', 'P100', 'K80']
 
     @staticmethod
     def from_dict(d):

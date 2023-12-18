@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nodeocc"
-version = "1.0.0"
+version = "1.0.2"
 authors = [{ name = "Matteo Boschini" }]
 maintainers = [{ name = "Lorenzo Bonicelli" }, { name = "Aniello Panariello" }]
 description = "TUI application for viewing the status of GPU allocations on a Slurm cluster"
@@ -30,10 +30,7 @@ classifiers = [
 dependencies = ["pandas", "numpy"]
 
 [project.urls]
-Repository = "https://github.com/mbosc/slurm_nodeocc"
+Repository = "https://github.com/apanariello4/slurm_nodeocc"
 
 [project.scripts]
 nodeocc = "controller.controller:_main"
-
-[tool.setuptools.packages.find]
-where = ["src"]
