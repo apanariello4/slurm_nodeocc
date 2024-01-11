@@ -89,7 +89,7 @@ class Singleton:
         self.basepath = self.args.basepath
 
         if self.args.daemon_only:
-            handler = RotatingFileHandler(os.path.join(self.basepath, '.master_log_n.txt'), maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
+            handler = RotatingFileHandler(os.path.join(self.basepath, '.master_log.txt'), maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
             logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
                                 handlers=[handler])
         # set logging file

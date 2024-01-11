@@ -1,6 +1,5 @@
-import json
 import os
-import time
+import re
 from io import StringIO
 
 import pandas as pd
@@ -152,27 +151,27 @@ def _load_joblet_meta(line):
 
 
 def _gpus_per_joblet(line):
-    if pd.isna(line['gpus_per_job']) and pd.isna(line['gpus_per_node']) and pd.isna(line['gpus_per_task']):
+    if pd.isna(line['ALL_JOB_NODES']):
         return 0
-    elif not pd.isna(line['gpus_per_node']):
-        return line['gpus_per_node'] * (line['NODES'] if pd.isna(line['NODELIST']) else 1)
+    if line['ALL_JOB_NODES'].count(',') == 0:
+        return line['TRES_ALLOC'].split('gpu=')[-1].split(',')[0] if 'gpu=' in line['TRES_ALLOC'] else 0
     else:
-        if line['ST'] == 'PD':
-            return line['gpus_per_job'] if not pd.isna(line['gpus_per_job']) else line['gpus_per_task']
-        gpus_id = line['joblet_meta_str']
-        gpus_id = sum([x.split('IDX:')[-1].split(')')[0].split(',') for x in gpus_id if 'gpu' in x], [])
-        gpus_n = len(gpus_id) + sum([len(range(int(x.split('-')[1].split()[0]) - int(x.split('-')[0]))) for x in gpus_id if '-' in x])
-        return gpus_n
+        node = line['NODELIST']
+        node_idx = line['ALL_JOB_NODES'].split(',').index(node)
+        return int(re.findall(r'gpu:(\d+)', line['TRES_PER_NODE'])[node_idx]) if 'gpu:' in line['TRES_PER_NODE'] else 0
 
 
 def _cpus_per_joblet(line):
-    if line['ST'] == 'PD':
-        return line['MIN_CPUS']
+    if pd.isna(line['ALL_JOB_NODES']):
+        return 0
+    if line['ALL_JOB_NODES'].count(',') == 0:
+        return int(str(line['TRES_ALLOC']).split('cpu=')[-1].split(',')[0])
     else:
-        cpus_id = line['joblet_meta_str']
-        cpus = sum([x.split('CPU_IDs=')[-1].split()[0].split(',') for x in cpus_id], [])
-        cpus_n = len(cpus) + sum([len(range(int(x.split('-')[1].split()[0]) - int(x.split('-')[0]))) for x in cpus if '-' in x])
-        return cpus_n
+        nodes = line['NODES']
+        tot_gpu = int(str(line['TRES_ALLOC']).split('gpu=')[-1].split(',')[0]) if 'gpu=' in str(line['TRES_ALLOC']) else 0
+        tot_cpus = int(str(line['TRES_ALLOC']).split('cpu=')[-1].split(',')[0])
+        n_gpus = line['joblet_gpus']
+        return int(tot_cpus) // int(nodes) if tot_gpu == 0 else int(tot_cpus) // tot_gpu * n_gpus
 
 
 memunits = {
@@ -193,12 +192,26 @@ def parse_mem(thing):
 
 
 def _mem_per_joblet(line):
-    if line['ST'] == 'PD':
-        return parse_mem(line['MIN_MEMORY'])
-    else:
-        mem_id = line['joblet_meta_str']
-        mem = sum([int(x.split('Mem=')[-1].split()[0]) for x in mem_id])
+    if pd.isna(line['ALL_JOB_NODES']):
+        return 0
+    try:
+        mem = line['TRES_ALLOC'].split('mem=')[-1].split(',')[0]
+        if 'G' in mem:
+            mem = int(mem.split('G')[0]) * 1024
+        elif 'M' in mem:
+            mem = int(mem.split('M')[0])
+        else:
+            mem = int(mem)
+    except BaseException:
+        return 0
+
+    if line['ALL_JOB_NODES'].count(',') == 0:
         return mem
+    else:
+        nodes = line['NODES']
+        tot_gpu = int(str(line['TRES_ALLOC']).split('gpu=')[-1].split(',')[0]) if 'gpu=' in str(line['TRES_ALLOC']) else 0
+        n_gpus = line['joblet_gpus']
+        return int(mem) // int(nodes) if tot_gpu == 0 else int(mem) // tot_gpu * n_gpus
 
 
 def _true_jobid(line):
@@ -257,15 +270,20 @@ def read_jobs():
     instance.timeme(f"\t- squeue and dataframe creation")
 
     squeue_df['JOBID'] = squeue_df['JOBID'].apply(str)
+    squeue_df['ALL_JOB_NODES'] = squeue_df['NODELIST']
     squeue_df = _split_column(squeue_df, 'NODELIST')
+
     squeue_df['gpus_per_node'] = squeue_df['TRES_PER_NODE'].apply(lambda x: try_parse_gpu(x) if isinstance(x, str) else x)
     squeue_df['gpus_per_job'] = squeue_df['TRES_PER_JOB'].apply(lambda x: try_parse_gpu(x) if isinstance(x, str) else x)
     squeue_df['gpus_per_task'] = squeue_df['TRES_PER_TASK'].apply(lambda x: try_parse_gpu(x) if isinstance(x, str) else x)
 
     try:
-        squeue_df['joblet_mem'] = squeue_df['TRES_ALLOC'].apply(get_mem_joblet)
-        squeue_df['joblet_gpus'] = squeue_df['TRES_ALLOC'].apply(lambda l: str(l).split('gpu=')[-1].split(',')[0] if 'gpu=' in str(l) else 0)
-        squeue_df['joblet_cpus'] = squeue_df['TRES_ALLOC'].apply(lambda l: int(str(l).split('cpu=')[-1].split(',')[0]))
+        # squeue_df['joblet_gpus'] = squeue_df['TRES_ALLOC'].apply(lambda l: str(l).split('gpu=')[-1].split(',')[0] if 'gpu=' in str(l) else 0)
+        squeue_df['joblet_gpus'] = squeue_df.apply(_gpus_per_joblet, axis=1)
+        # squeue_df['joblet_cpus'] = squeue_df['TRES_ALLOC'].apply(lambda l: int(str(l).split('cpu=')[-1].split(',')[0]))
+        squeue_df['joblet_cpus'] = squeue_df.apply(_cpus_per_joblet, axis=1)
+        # squeue_df['joblet_mem'] = squeue_df['TRES_ALLOC'].apply(get_mem_joblet)
+        squeue_df['joblet_mem'] = squeue_df.apply(_mem_per_joblet, axis=1)
     except Exception as e:
         instance.err(f"Exception PD: {e}")
 
