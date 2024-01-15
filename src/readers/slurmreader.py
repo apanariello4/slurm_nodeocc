@@ -151,27 +151,29 @@ def _load_joblet_meta(line):
 
 
 def _gpus_per_joblet(line):
-    if pd.isna(line['ALL_JOB_NODES']):
+    try:
+        if 'node=1' in line['TRES_ALLOC']:
+            return line['TRES_ALLOC'].split('gpu=')[-1].split(',')[0] if 'gpu=' in line['TRES_ALLOC'] else 0
+        else:
+            node = line['NODELIST']
+            node_idx = line['ALL_JOB_NODES'].split(',').index(node)
+            return int(re.findall(r'gpu:(\d+)', line['TRES_PER_NODE'])[node_idx]) if 'gpu:' in line['TRES_PER_NODE'] else 0
+    except BaseException as e:
         return 0
-    if line['ALL_JOB_NODES'].count(',') == 0:
-        return line['TRES_ALLOC'].split('gpu=')[-1].split(',')[0] if 'gpu=' in line['TRES_ALLOC'] else 0
-    else:
-        node = line['NODELIST']
-        node_idx = line['ALL_JOB_NODES'].split(',').index(node)
-        return int(re.findall(r'gpu:(\d+)', line['TRES_PER_NODE'])[node_idx]) if 'gpu:' in line['TRES_PER_NODE'] else 0
 
 
 def _cpus_per_joblet(line):
-    if pd.isna(line['ALL_JOB_NODES']):
+    try:
+        if 'node=1' in line['TRES_ALLOC']:
+            return int(str(line['TRES_ALLOC']).split('cpu=')[-1].split(',')[0])
+        else:
+            nodes = line['NODES']
+            tot_gpu = int(str(line['TRES_ALLOC']).split('gpu=')[-1].split(',')[0]) if 'gpu=' in str(line['TRES_ALLOC']) else 0
+            tot_cpus = int(str(line['TRES_ALLOC']).split('cpu=')[-1].split(',')[0])
+            n_gpus = line['joblet_gpus']
+            return int(tot_cpus) // int(nodes) if tot_gpu == 0 else int(tot_cpus) // tot_gpu * n_gpus
+    except BaseException as e:
         return 0
-    if line['ALL_JOB_NODES'].count(',') == 0:
-        return int(str(line['TRES_ALLOC']).split('cpu=')[-1].split(',')[0])
-    else:
-        nodes = line['NODES']
-        tot_gpu = int(str(line['TRES_ALLOC']).split('gpu=')[-1].split(',')[0]) if 'gpu=' in str(line['TRES_ALLOC']) else 0
-        tot_cpus = int(str(line['TRES_ALLOC']).split('cpu=')[-1].split(',')[0])
-        n_gpus = line['joblet_gpus']
-        return int(tot_cpus) // int(nodes) if tot_gpu == 0 else int(tot_cpus) // tot_gpu * n_gpus
 
 
 memunits = {
@@ -192,8 +194,6 @@ def parse_mem(thing):
 
 
 def _mem_per_joblet(line):
-    if pd.isna(line['ALL_JOB_NODES']):
-        return 0
     try:
         mem = line['TRES_ALLOC'].split('mem=')[-1].split(',')[0]
         if 'G' in mem:
@@ -205,7 +205,7 @@ def _mem_per_joblet(line):
     except BaseException:
         return 0
 
-    if line['ALL_JOB_NODES'].count(',') == 0:
+    if 'node=1' in line['TRES_ALLOC']:
         return mem
     else:
         nodes = line['NODES']

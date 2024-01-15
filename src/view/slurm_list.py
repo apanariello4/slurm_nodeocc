@@ -47,7 +47,7 @@ def _joblet_format(instance, job, width=74, jobid_type='agg'):
         if instance.view_mode in ('gpu', 'ram'):
             joblet_repr += _format_to((f'{joblet.n_gpus}gp' if joblet.n_gpus > 0 else " - "), 3, 'left')
         elif instance.view_mode == 'cpu':
-            joblet_repr += _format_to((f'{joblet.cpus}cp' if joblet.cpus > 0 else "-"), 3, 'left')
+            joblet_repr += _format_to((f'{joblet.cpus}cp' if joblet.cpus > 0 else " - "), 3, 'left')
         joblet_repr += ' '
         joblet_repr += _format_to(joblet.node if joblet.node is not None else job.reason, 11)
         joblet_reprs.append(joblet_repr)

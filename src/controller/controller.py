@@ -57,6 +57,7 @@ try:
     print(END, end='')
 except Exception as e:
     print(f"{BBLUE}Could not get newest version from pip, check if {program_name} is up to date{END}")
+    newest_version = '?.?.?'
     time.sleep(5)
 
 
