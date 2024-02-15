@@ -122,7 +122,7 @@ def update_data_master(instance):
     queue_jobs = sorted(queue_jobs, key=lambda x: x['priority'], reverse=True)
     maxlen = min(120, len(running_jobs) + len(queue_jobs))
 
-    msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs[:maxlen]})
+    msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs[:(maxlen - len(running_jobs))]})
 
     # msg to bytes
     msg = msg.encode('utf-8')
