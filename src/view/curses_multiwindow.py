@@ -349,16 +349,21 @@ def handle_keys(stdscr, instance):
     if k == ord('S'):
         instance.sort_by_prio = not instance.sort_by_prio
     if k == ord('g'):
-        instance.view_mode = {"gpu": "ram", "ram": "cpu", "cpu": "gpu"}[instance.view_mode]
+        instance.view_mode = {"gpu": "ram", "ram": "cpu", "cpu": "gpu"}.get(instance.view_mode, "gpu")
+        instance.right_width = 33 if instance.view_mode != 'info' else 39
+        stdscr.clear()
     if k == ord('j'):
         instance.job_id_type = "true" if instance.job_id_type == "agg" else "agg"
     if k == ord('z'):
-        # instance.show_starttime = not instance.show_starttime
-        pass
+        instance.show_starttime = not instance.show_starttime
     if k == ord('t'):
         instance.show_account = not instance.show_account
     if k == ord('p'):
         instance.show_prio = not instance.show_prio
+    if k == ord('i'):
+        instance.view_mode = 'info' if instance.view_mode != 'info' else 'gpu'
+        instance.right_width = 33 if instance.view_mode != 'info' else 39
+        stdscr.clear()
 
 
 def update_screen(stdscr, instance):
@@ -395,11 +400,12 @@ def update_screen(stdscr, instance):
 
     stdscr.refresh()
 
-    left_width = columns - 33  # 72
+    left_width = columns - instance.right_width  # 72
+    right_width = instance.right_width  # 33
     instance.left_width = left_width
     left_window = curses.newwin(lines - 1, left_width, 0, xoffset)
     left_buffer = Buffer(left_window, lines, stdscr)
-    right_window = curses.newwin(lines - 1, 31, 0, xoffset + left_width + 1)
+    right_window = curses.newwin(lines - 1, right_width - 2, 0, xoffset + left_width + 1)
     right_buffer = Buffer(right_window, lines, stdscr)
 
     left_buffer.write(instance.rens)
@@ -433,6 +439,11 @@ def update_screen(stdscr, instance):
     stdscr.addstr(lines - 1, left_width - 18 + 19, '[Y:REDRAW]', curses.color_pair(2))
     instance.add_button(lines - 1, left_width - 18 + 19, '[Y:REDRAW]', ord('y'))
 
+    stdscr.addstr(0, left_width + 2, '[I:', curses.color_pair(2))
+    stdscr.addstr(0, left_width + 5, 'INFO', curses.color_pair(2) | (curses.A_REVERSE if instance.view_mode == 'info' else 0))
+    stdscr.addstr(0, left_width + 9, ']', curses.color_pair(2))
+    instance.add_button(0, left_width + 2, '[I:INFO]', ord('i'))
+    stdscr.addstr(0, left_width + 10, '─' * (columns - 15 - left_width - 3), curses.color_pair(2))
     stdscr.addstr(0, columns - 15, '[G:', curses.color_pair(2))
     stdscr.addstr(0, columns - 12, 'GPU', curses.color_pair(2) | (curses.A_REVERSE if instance.view_mode == 'gpu' else 0))
     stdscr.addstr(0, columns - 12 + 3, 'RAM', curses.color_pair(2) | (curses.A_REVERSE if instance.view_mode == 'ram' else 0))
@@ -547,6 +558,7 @@ async def main(stdscr):
     # status
 
     instance.a_filter = 0
+    instance.right_width = 33
 
     stdscr.clear()
 

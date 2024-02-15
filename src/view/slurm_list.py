@@ -21,7 +21,7 @@ def _joblet_format(instance, job, width=74, jobid_type='agg'):
         if instance.show_prio:
             joblet_repr += '(' + _format_to(job.priority, len(str(job.priority))) + ')'
             joblet_repr += ' '
-            loffset += 9
+            loffset += len(str(job.priority)) + 3
         if instance.show_account:
             joblet_repr += _format_to(job.account, 9)
             joblet_repr += ' '

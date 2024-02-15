@@ -115,6 +115,8 @@ def view_viz(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=Non
         return view_viz_ram(infrastructure, jobs, work, stylefn, current_user)
     elif mode == 'cpu':
         return view_viz_cpu(infrastructure, jobs, work, stylefn, current_user)
+    elif mode == 'info':
+        return view_viz_info(infrastructure, jobs, work, stylefn, current_user)
 
 
 def view_viz_ram(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
@@ -354,6 +356,9 @@ def get_cpu_icon(stat):
     }.get(stat, cpu_avail)
 
 
+GPU_MEM = {"K80": 24, "P100": 16, "1080": 11, "TitanXP": 12, "2080": 11, "RTX5000": 16, "RTX6000": 24, "RTXA5000": 24, "A40": 48}
+
+
 def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
     # this is for hot reload
     if not work:
@@ -476,6 +481,70 @@ def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
         # print emergency screen
         cust_print('  ◀ INFRASTRUCTURE IS DOWN ▶  ', 'BG_RED')
         cust_print(random.choice([flip, chunga, ogre]), 'GREEN')
+
+    return RetScope.return_string
+
+
+def view_viz_info(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
+    # this is for hot reload
+    if not work:
+        return "UPDATE IN PROGRESS - PLZ W8 M8 B8"
+
+    # who is the current user?
+    if current_user is None:
+        import os
+        current_user = os.path.basename(os.environ['HOME'])
+
+    nodes = infrastructure.get_sorted_nodes()
+    infrast_down = all([x.status == 'down' for x in nodes])
+
+    class RetScope:
+        return_string = ''
+
+    def cust_print(thing, style=None):
+        RetScope.return_string += (thing if style is None else stylefn(style, thing)) + '\n'
+
+    if not infrast_down:
+        stalled_jobs = sum([j.state == 'S' for j in jobs])
+        max_gpu_len = max([len(n.gpu_model) + len(str(n.n_gpus)) if n.gpu_model is not None else 0 for n in nodes])
+        max_n_gpu_len = max([len(str(n.n_gpus)) for n in nodes])
+        max_cpu_len = max([len(str(n.cpus)) for n in nodes] + [len('CPUs')])
+        max_ram_len = max([len(str(n.mem // 1024)) for n in nodes])
+        RetScope.return_string += f'{"":{gpu_name_chars}} {"GPUs":{max_gpu_len+1}}\n'
+        for n in nodes:
+            gpu_model = n.gpu_model if n.gpu_model is not None else 'N/A'
+            # gpu_mem = n.gpu_mem if n.gpu_mem is not None else 'N/A'
+            mem = n.mem // 1024 if n.mem is not None else 'N/A'
+            n_gpus = n.n_gpus if n.n_gpus is not None else 'N/A'
+            n_cpus = n.cpus if n.cpus is not None else 'N/A'
+            # gpu_mem = GPU_MEM.get(gpu_model, 'N/A')
+            gpu_mem = ','.join([str(GPU_MEM.get(x, 'N/A')) for x in gpu_model.split(',')])
+            # gpu_str = f'{n_gpus}x{gpu_model:{max_gpu_len-(1*(len(str(n_gpus))))}}' if n_gpus != 0 else f'{"N/A":{max_gpu_len+1}}'
+            if n_gpus != 0:
+                gpu_str = f'{stylefn("RED", str(n_gpus))}'
+                gpu_str += f'x{stylefn("YELLOW", gpu_model)}'
+                gpu_str += f'@{stylefn("GREEN", str(gpu_mem))}G'
+            else:
+                gpu_str = f'{"N/A":{max_gpu_len+1}}'
+            RetScope.return_string += f'{_format_to(n.name, gpu_name_chars, "right")} {gpu_str}\n'
+            # RetScope.return_string += f'{"":{gpu_name_chars}} {"VRAM":{max_gpu_len+1}} {f"{mem}G"}\n'
+
+    onmain, waitString = maintenance_status(infrastructure)
+    if onmain:
+        cust_print('  ◀ ONGOING  MAINTENANCE ▶    ', 'BG_MAGENTA')
+    elif len(infrastructure.maintenances):
+        cust_print('  ◀ MAINTENANCE  in %4s ▶    ' % waitString, 'BG_MAGENTA')
+    elif len(jobs) == 0:
+        cust_print('         ◀ NO  JOBS ▶         ', 'BG_GREEN')
+    elif stalled_jobs / len(jobs) > 0.5:
+        cust_print('       ◀ JOBS ON HOLD ▶       ', 'BG_YELLOW')
+    else:
+        cust_print('')
+
+    # print summary
+    # cust_print(''.join([' ['+ ram_occ + 'run', paused + 'hld', drain + 'drn', down + 'dwn', '()res]']))
+    # cust_print(''.join(['[' + ram_occ + f'{cpu_size}{cpu_unit}', cpu_paused + 'hld', cpu_drain + 'drn', cpu_pendr + 'pnd', cpu_down + 'dwn', '()res]']))
+    # gpuc = 'GREEN'
 
     return RetScope.return_string
 

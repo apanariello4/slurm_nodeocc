@@ -120,9 +120,9 @@ def update_data_master(instance):
     running_jobs = [j.to_nested_dict() for j in jobs if j.state == 'CG' or j.state == 'R']
     queue_jobs = [j.to_nested_dict() for j in jobs if j.state != 'R' and j.state != 'CG']
     queue_jobs = sorted(queue_jobs, key=lambda x: x['priority'], reverse=True)
-    maxlen = min(120, len(running_jobs) + len(queue_jobs))
+    maxlen = min(100, len(running_jobs) + len(queue_jobs))
 
-    msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs[:maxlen]})
+    msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs[:maxlen - len(running_jobs)]})
 
     # msg to bytes
     msg = msg.encode('utf-8')

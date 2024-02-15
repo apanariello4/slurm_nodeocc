@@ -92,4 +92,4 @@ class Infrastructure:
 
     def get_sorted_nodes(self):
 
-        return sorted(self.nodes, key=lambda x: self.prior.index(x.gpu_model) if x.gpu_model in self.prior else -1)
+        return sorted(self.nodes, key=lambda x: self.prior.index(x.gpu_model.split(',')[0]) if x.gpu_model.split(',')[0] in self.prior else -1)
