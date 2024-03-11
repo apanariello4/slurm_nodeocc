@@ -15,6 +15,24 @@ from view import update_views
 
 a_filter_values = [None, 'me', 'prod', 'stud', 'cvcs']
 
+BUTTON_ACTIONS = {
+    'up_1': [ord('w'), curses.KEY_UP, ord('k')],
+    'down_1': [ord('s'), curses.KEY_DOWN, ord('j')],
+    'left_1': [ord('a'), curses.KEY_LEFT, ord('h')],
+    'right_1': [ord('d'), curses.KEY_RIGHT, ord('l')],
+    'up_tab': [curses.KEY_NPAGE],
+    'down_tab': [curses.KEY_PPAGE],
+    'quit': [ord('q'), 'q'],
+    'sort_prio': [ord('S')],
+    'res_view_mode': [ord('g')],
+    'job_id_type': [ord('b')],
+    'show_starttime': [ord('z')],
+    'show_account': [ord('t')],
+    'show_prio': [ord('p')],
+    'refresh': [ord('y')],
+    'info': [ord('i')],
+}
+
 
 def try_open_socket_as_slave(instance):
     if not instance.port_file_exists():
@@ -289,8 +307,8 @@ class Buffer(object):
                     xacc += len(chunk)
         if len(self.buffer) > self.lines - 2:
             self.screen.addstr(self.lines - 2, instance.xoffset + instance.left_width // 2 - 6, ' ▼ SCROLL ▲ ', curses.color_pair(2) | curses.A_REVERSE)
-            instance.add_button(self.lines - 2, instance.xoffset + 31, 'D', ord('s'))
-            instance.add_button(self.lines - 2, instance.xoffset + 40, 'U', ord('w'))
+            instance.add_button(self.lines - 2, instance.xoffset + 31, 'D', BUTTON_ACTIONS['down_1'][0])
+            instance.add_button(self.lines - 2, instance.xoffset + 40, 'U', BUTTON_ACTIONS['up_1'][0])
 
         self.window.border()
         self.window.noutrefresh()
@@ -330,40 +348,50 @@ def handle_keys(stdscr, instance):
 
     # process input
     # RIGHT
-    if k == ord('d') or k == 261:
+    if k in BUTTON_ACTIONS['right_1']:
         instance.a_filter = (instance.a_filter + 1) % len(a_filter_values)
         instance.voff = 0
     # LEFT
-    elif k == ord('a') or k == 260:
+    elif k in BUTTON_ACTIONS['left_1']:
         instance.a_filter = (instance.a_filter + (len(a_filter_values) - 1)) % len(a_filter_values)
         instance.voff = 0
     elif valid_mouse and isinstance(k, str) and k.startswith('AF_'):
         instance.a_filter = int(k.split('AF_')[1])
     # DOWN
-    elif k == ord('s') or k == 258:
+    elif k in BUTTON_ACTIONS['down_1']:
         instance.voff += 1
     # UP
-    elif k == ord('w') or k == 259:
+    elif k in BUTTON_ACTIONS['up_1']:
         instance.voff -= 1
 
-    if k == ord('S'):
+    elif k in BUTTON_ACTIONS['sort_prio']:
         instance.sort_by_prio = not instance.sort_by_prio
-    if k == ord('g'):
-        instance.view_mode = {"gpu": "ram", "ram": "cpu", "cpu": "gpu"}.get(instance.view_mode, "gpu")
+    elif k in BUTTON_ACTIONS['res_view_mode']:
+        instance.view_mode = {"gpu": "ram", "ram": "cpu", "cpu": "gpu"}[instance.view_mode]
         instance.right_width = 33 if instance.view_mode != 'info' else 39
         stdscr.clear()
-    if k == ord('j'):
+    elif k in BUTTON_ACTIONS['job_id_type']:
         instance.job_id_type = "true" if instance.job_id_type == "agg" else "agg"
-    if k == ord('z'):
-        instance.show_starttime = not instance.show_starttime
-    if k == ord('t'):
+    elif k in BUTTON_ACTIONS['show_starttime']:
+        # instance.show_starttime = not instance.show_starttime
+        pass
+    elif k in BUTTON_ACTIONS['show_account']:
         instance.show_account = not instance.show_account
-    if k == ord('p'):
+    elif k in BUTTON_ACTIONS['show_prio']:
         instance.show_prio = not instance.show_prio
-    if k == ord('i'):
+    elif k in BUTTON_ACTIONS['info']:
         instance.view_mode = 'info' if instance.view_mode != 'info' else 'gpu'
         instance.right_width = 33 if instance.view_mode != 'info' else 39
         stdscr.clear()
+    elif k in BUTTON_ACTIONS['up_tab']:
+        # get screen size
+        height, width = stdscr.getmaxyx()
+
+        instance.voff += ((height - 4) // 2) + 1
+    elif k in BUTTON_ACTIONS['down_tab']:
+        height, width = stdscr.getmaxyx()
+
+        instance.voff -= ((height - 4) // 2) + 1
 
 
 def update_screen(stdscr, instance):
@@ -374,7 +402,7 @@ def update_screen(stdscr, instance):
     lines, columns = os.get_terminal_size().lines, os.get_terminal_size().columns
     s_lines, s_columns = stdscr.getmaxyx()
     instance.max_columns = s_columns
-    if instance.k == ord('y'):
+    if instance.k in BUTTON_ACTIONS['refresh']:
         stdscr.clear()
 
     totsize = 106
@@ -415,7 +443,7 @@ def update_screen(stdscr, instance):
 
     # render menu
     stdscr.addstr(lines - 1, xoffset + 1 + 0, '◀')
-    instance.add_button(lines - 1, xoffset + 1 + 0, '◀', ord('a'))
+    instance.add_button(lines - 1, xoffset + 1 + 0, '◀', BUTTON_ACTIONS['left_1'][0])
     stdscr.addstr(lines - 1, xoffset + 1 + 2, 'ALL', curses.color_pair(2) | (curses.A_REVERSE if a_filter_values[instance.a_filter] is None else 0))
 
     instance.add_button(lines - 1, xoffset + 1 + 2, 'ALL', 'AF_0')
@@ -430,42 +458,42 @@ def update_screen(stdscr, instance):
     instance.add_button(lines - 1, xoffset + 1 + 19, 'CVCS', 'AF_4')
 
     stdscr.addstr(lines - 1, xoffset + 1 + 24, '▶')
-    instance.add_button(lines - 1, xoffset + 1 + 24, '▶', ord('d'))
+    instance.add_button(lines - 1, xoffset + 1 + 24, '▶', BUTTON_ACTIONS['right_1'][0])
     stdscr.addstr(lines - 1, xoffset + 1 + 25, ' ' * (columns - 27 - xoffset))
 
     stdscr.addstr(lines - 1, left_width - 8, '[Q:QUIT]', curses.color_pair(2))
-    instance.add_button(lines - 1, left_width - 8, '[Q:QUIT]', ord('q'))  # 53
+    instance.add_button(lines - 1, left_width - 8, '[Q:QUIT]', BUTTON_ACTIONS['quit'][0])  # 53
 
     stdscr.addstr(lines - 1, left_width - 18 + 19, '[Y:REDRAW]', curses.color_pair(2))
-    instance.add_button(lines - 1, left_width - 18 + 19, '[Y:REDRAW]', ord('y'))
+    instance.add_button(lines - 1, left_width - 18 + 19, '[Y:REDRAW]', BUTTON_ACTIONS['refresh'][0])
 
     stdscr.addstr(0, left_width + 2, '[I:', curses.color_pair(2))
     stdscr.addstr(0, left_width + 5, 'INFO', curses.color_pair(2) | (curses.A_REVERSE if instance.view_mode == 'info' else 0))
     stdscr.addstr(0, left_width + 9, ']', curses.color_pair(2))
-    instance.add_button(0, left_width + 2, '[I:INFO]', ord('i'))
+    instance.add_button(0, left_width + 2, '[I:INFO]', BUTTON_ACTIONS['info'][0])
     stdscr.addstr(0, left_width + 10, '─' * (columns - 15 - left_width - 3), curses.color_pair(2))
     stdscr.addstr(0, columns - 15, '[G:', curses.color_pair(2))
     stdscr.addstr(0, columns - 12, 'GPU', curses.color_pair(2) | (curses.A_REVERSE if instance.view_mode == 'gpu' else 0))
     stdscr.addstr(0, columns - 12 + 3, 'RAM', curses.color_pair(2) | (curses.A_REVERSE if instance.view_mode == 'ram' else 0))
     stdscr.addstr(0, columns - 12 + 6, 'CPU', curses.color_pair(2) | (curses.A_REVERSE if instance.view_mode == 'cpu' else 0))
     stdscr.addstr(0, columns - 12 + 9, ']', curses.color_pair(2))
-    instance.add_button(0, columns - 15, '[G:GPURAMCPU]', ord('g'))
+    instance.add_button(0, columns - 15, '[G:GPURAMCPU]', BUTTON_ACTIONS['res_view_mode'][0])
 
-    stdscr.addstr(lines - 1, xoffset + 25 + 2, '[J:', curses.color_pair(2))
+    stdscr.addstr(lines - 1, xoffset + 25 + 2, '[B:', curses.color_pair(2))
     stdscr.addstr(lines - 1, xoffset + 25 + 2 + 3, 'AGG', curses.color_pair(2) | (curses.A_REVERSE if instance.job_id_type == 'agg' else 0))
     stdscr.addstr(lines - 1, xoffset + 25 + 2 + 3 + 3, 'TRUE', curses.color_pair(2) | (curses.A_REVERSE if instance.job_id_type == 'true' else 0))
     stdscr.addstr(lines - 1, xoffset + 25 + 2 + 3 + 3 + 4, ']', curses.color_pair(2))
-    instance.add_button(lines - 1, xoffset + 25 + 2, '[J:AGGTRUE]', ord('j'))
+    instance.add_button(lines - 1, xoffset + 25 + 2, '[B:AGGTRUE]', BUTTON_ACTIONS['job_id_type'][0])
 
     stdscr.addstr(lines - 1, xoffset + 37 + 2, '[P:', curses.color_pair(2))
     stdscr.addstr(lines - 1, xoffset + 37 + 2 + 3, 'PRIORITY', curses.color_pair(2) | (curses.A_REVERSE if instance.show_prio else 0))
     stdscr.addstr(lines - 1, xoffset + 37 + 2 + 3 + 8, ']', curses.color_pair(2))
-    instance.add_button(lines - 1, xoffset + 37 + 2, '[P:PRIORITY]', ord('p'))
+    instance.add_button(lines - 1, xoffset + 37 + 2, '[P:PRIORITY]', BUTTON_ACTIONS['show_prio'][0])
 
     stdscr.addstr(lines - 1, xoffset + 50 + 2, '[T:', curses.color_pair(2))
     stdscr.addstr(lines - 1, xoffset + 50 + 2 + 3, 'ACCOUNT', curses.color_pair(2) | (curses.A_REVERSE if instance.show_account else 0))
     stdscr.addstr(lines - 1, xoffset + 50 + 2 + 3 + 7, ']', curses.color_pair(2))
-    instance.add_button(lines - 1, xoffset + 50 + 2, '[T:ACCOUNT]', ord('t'))
+    instance.add_button(lines - 1, xoffset + 50 + 2, '[T:ACCOUNT]', BUTTON_ACTIONS['show_account'][0])
 
     # get slurm user partition
     stdscr.addstr(lines - 1, xoffset + 62 + 2, f'(Avg time {instance.avg_wait_time})', curses.color_pair(2))
@@ -478,7 +506,7 @@ def update_screen(stdscr, instance):
 
 
 def get_char_async(stdscr, instance):
-    while instance.k != ord('q') and instance.k != 'q':
+    while instance.k not in BUTTON_ACTIONS['quit']:  # != 'q'
         handle_keys(stdscr, instance)
         update_screen(stdscr, instance)
 
@@ -487,7 +515,7 @@ def get_char_async(stdscr, instance):
 
 
 async def update_screen_info(stdscr, instance):
-    while instance.k != ord('q') and instance.k != 'q':
+    while instance.k not in BUTTON_ACTIONS['quit']:
         await instance.fetch()
         instance.log("GOT DATA FROM MASTER")
         update_screen(stdscr, instance)

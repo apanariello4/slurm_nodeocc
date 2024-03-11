@@ -356,7 +356,7 @@ def get_cpu_icon(stat):
     }.get(stat, cpu_avail)
 
 
-GPU_MEM = {"K80": 24, "P100": 16, "1080": 11, "TitanXP": 12, "2080": 11, "RTX5000": 16, "RTX6000": 24, "RTXA5000": 24, "A40": 48}
+GPU_MEM = {"K80": 12, "P100": 16, "1080": 11, "TitanXP": 12, "2080": 11, "RTX5000": 16, "RTX6000": 24, "RTXA5000": 24, "A40": 48}
 
 
 def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
