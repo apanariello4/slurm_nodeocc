@@ -63,8 +63,10 @@ except Exception as e:
 
 BEGIN_DELIM = "!{$"
 END_DELIM_ENCODED = "!}$".encode('utf-8')
+EXTRA_MSG_BEGIN_DELIM = "!{#"
 MAX_BUF = 65535
 MAX_MSG_LEN = 1024 * 1024 * 1024
+JOB_LIMIT_PER_MSG = 100
 
 parser = argparse.ArgumentParser(description='Visualize slurm jobs')
 parser.add_argument('--debug', action='store_true', help='Enable logging')
@@ -102,6 +104,17 @@ def get_avg_wait_time(instance: Singleton):
         instance.err(traceback.format_exc())
         return 'err', 'err'
 
+def send_msg(instance, msg, n_extra_msgs=0, is_extra=False):
+    # msg to bytes
+    msg = msg.encode('utf-8')
+    begin_delim = EXTRA_MSG_BEGIN_DELIM if is_extra else BEGIN_DELIM
+    # for backward compatibility, msg_len = n_extra_msgs if extra data is expected, 0 otherwise
+    msg_len = n_extra_msgs
+    # msg_len = len(msg)
+    msg = (str(msg_len) + begin_delim).encode('utf-8') + msg + END_DELIM_ENCODED
+    instance.timeme(f"- msg encoded with len {msg_len}")
+
+    instance.sock.sendto(msg, ('<broadcast>', instance.port))
 
 def update_data_master(instance):
     if not instance.check_port_file_master():
@@ -120,52 +133,77 @@ def update_data_master(instance):
     running_jobs = [j.to_nested_dict() for j in jobs if j.state == 'CG' or j.state == 'R']
     queue_jobs = [j.to_nested_dict() for j in jobs if j.state != 'R' and j.state != 'CG']
     queue_jobs = sorted(queue_jobs, key=lambda x: x['priority'], reverse=True)
-    maxlen = min(100, len(running_jobs) + len(queue_jobs))
+    maxlen = min(JOB_LIMIT_PER_MSG, len(running_jobs) + len(queue_jobs))
+    
+    queue_jobs, extra_queue_jobs = queue_jobs[:maxlen - len(running_jobs)], queue_jobs[maxlen - len(running_jobs):]
+    cur_timestamp = time.time()
+    msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs, 'ts': str(cur_timestamp)})
 
-    msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs[:maxlen - len(running_jobs)]})
 
-    # msg to bytes
-    msg = msg.encode('utf-8')
-    msg_len = len(msg)
-    msg = (str(msg_len) + BEGIN_DELIM).encode('utf-8') + msg + END_DELIM_ENCODED
-    instance.timeme(f"- msg encoded with len {msg_len}")
+    N_EXTRA_MSGS = (len(extra_queue_jobs) // JOB_LIMIT_PER_MSG) + 1 if len(extra_queue_jobs) > 0 else 0
+    send_msg(instance, msg, n_extra_msgs=N_EXTRA_MSGS)
+    instance.timeme("- main broadcast")
 
-    instance.sock.sendto(msg, ('<broadcast>', instance.port))
-    instance.timeme(f"- broadcast")
+    if extra_queue_jobs:
+        # get batches of JOB_LIMIT_PER_MSG jobs
+        for job_idx in range(N_EXTRA_MSGS):
+            i = job_idx * JOB_LIMIT_PER_MSG
+            msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': extra_queue_jobs[i:i + JOB_LIMIT_PER_MSG], 'ts': str(cur_timestamp)})
+            send_msg(instance, msg, is_extra=True, n_extra_msgs=N_EXTRA_MSGS - job_idx - 1)
+            instance.timeme(f"- extra broadcast #{job_idx+1}")
 
     return inf, jobs
 
+def decode_msg_slave(data, delim=BEGIN_DELIM):
+    data = data.split(END_DELIM_ENCODED)[0]
+    data = data.decode('utf-8')
+    data = data.split(delim)[1]
+
+    msg = json.loads(data)
+    inf = Infrastructure.from_dict(msg['inf'])
+    jobs = [Job.from_dict(j) for j in msg['jobs']]
+    avg_wait_time = "N/A"  # get_avg_wait_time(instance)
+    return inf, jobs, avg_wait_time, msg
 
 async def get_data_slave(instance):
     inf, jobs = None, None
     try:
         # listen for data from master
         # instance.sock.settimeout(6.5)
-        data, addr = instance.sock.recvfrom(MAX_BUF)
+        data, _ = instance.sock.recvfrom(MAX_BUF)
+        decoded_data = data.decode('utf-8')
+        if BEGIN_DELIM in decoded_data:
+            n_msgs_remaining = int(decoded_data.split(BEGIN_DELIM)[0])
+            # msg_len += len(str(msg_len)) message len is deprecated and used for n_msgs_remaining
+            instance.timeme(f"received first message of {n_msgs_remaining} (total len {len(data)} bytes)")
 
-        if BEGIN_DELIM in data.decode('utf-8'):
-            msg_len = int(data.decode('utf-8').split(BEGIN_DELIM)[0])
-            msg_len += len(str(msg_len)) + 2
-            instance.timeme(f"about to receive {msg_len} bytes")
-            while END_DELIM_ENCODED not in data:
-                buf_len = min(MAX_BUF, msg_len - len(data))
-                instance.timeme(f"bytes remaining {msg_len - len(data)} - receiving")
-                data += instance.sock.recvfrom(buf_len)[0]
-
-                if len(data) > MAX_MSG_LEN:
-                    instance.err(f"Message too long, aborting")
-                    return
-
-            data = data.split(END_DELIM_ENCODED)[0]
-            # data = data[:msg_len]
-            data = data.decode('utf-8')
-            data = data.split(BEGIN_DELIM)[1]
-
-            msg = json.loads(data)
-            inf = Infrastructure.from_dict(msg['inf'])
-            jobs = [Job.from_dict(j) for j in msg['jobs']]
-            avg_wait_time = "N/A"  # get_avg_wait_time(instance)
+            inf, jobs, avg_wait_time, decoded_msg = decode_msg_slave(data)
             instance.timeme(f"- receive")
+            orig_timestamp = float(decoded_msg['ts'])
+
+            total_msg_n = n_msgs_remaining
+            msg_store = {i:[] for i in range(total_msg_n)}
+            while n_msgs_remaining>0:
+                data, _ = instance.sock.recvfrom(MAX_BUF)
+                back_msg_idx = int(data.decode('utf-8').split(EXTRA_MSG_BEGIN_DELIM)[0])
+                msg_idx = total_msg_n - back_msg_idx - 1 
+                _, new_jobs, _, new_ts = decode_msg_slave(data, delim=EXTRA_MSG_BEGIN_DELIM)
+
+                # check if timestamp is the same
+                if float(new_ts['ts']) != orig_timestamp:
+                    instance.timeme(f"Timestamp mismatch, skipping")
+                    return inf, jobs, avg_wait_time # return what we have
+                
+                msg_store[msg_idx] += new_jobs
+
+                n_msgs_remaining -= 1
+                instance.timeme(f"- extra receive, {n_msgs_remaining} remaining")
+
+            # sort and merge 
+            for msg_idx in range(total_msg_n):
+                if len(msg_store[msg_idx]) == 0:
+                    instance.log(f"Empty message {msg_idx}")
+                jobs += msg_store[msg_idx]
         else:
             instance.timeme(f"- no data")
             return None, None, None, None
