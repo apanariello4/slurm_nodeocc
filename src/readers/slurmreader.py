@@ -31,7 +31,7 @@ def _split_column(df, column):
 
 
 def _node_from_sinfo(x):
-    n = Node(_node_preproc(x['NODELIST']), x.n_gpu, x.m_gpu, x.reserved, None, x.CPUS, x.MEMORY)
+    n = Node(_node_preproc(x['NODELIST']), x.n_gpu, x.m_gpu, x.reserved, None, x.CPUS, x.MEMORY)#, feature=x.AVAIL_FEATURES)
     if x['STATE'] == 'drng' or 'drain' in x['STATE']:
         n.status = 'drain'
     elif x['STATE'].upper() in ('MAINT', 'DOWN', 'DOWN*', 'FAIL', 'FAILING', 'FAIL*'):
@@ -53,18 +53,20 @@ def _parse_gpu_models(line):
             return ','.join([x.split(':')[1] for x in line])
 
 
-def _read_nodes(reservations, pending_res):
-    sinfo_df = pd.read_csv(StringIO(os.popen(r'sinfo -N -o "%N;%G;%t;%m;%c"').read()), sep=';')
+def _read_nodes(reservations=None, pending_res=None, return_raw=False):
+    sinfo_df = pd.read_csv(StringIO(os.popen(r'sinfo -N -o "%N;%G;%t;%m;%c;%f"').read()), sep=';')
     sinfo_df = _split_column(sinfo_df, 'NODELIST').drop_duplicates()
-    sinfo_df['n_gpu'] = sinfo_df['GRES'].apply(lambda x: 0 if x.split('(')[0].split(':')[0] in ('(null)', '') else int(x.split('(')[0].split(':')[-1]))
+    sinfo_df.loc[:,'n_gpu'] = sinfo_df['GRES'].apply(lambda x: 0 if x.split('(')[0].split(':')[0] in ('(null)', '') else int(x.split('(')[0].split(':')[-1]))
     # sinfo_df['m_gpu'] = sinfo_df['GRES'].str.split(':').apply(lambda x: 'n/a' if x[0] in ('(null)', '') else x[1])
-    sinfo_df['m_gpu'] = sinfo_df['GRES'].str.split(';').apply(_parse_gpu_models)
+    sinfo_df.loc[:,'m_gpu'] = sinfo_df['GRES'].str.split(';').apply(_parse_gpu_models)
     sinfo_df['reserved'] = 'no'
     if reservations is not None:
         sinfo_df.loc[sinfo_df['NODELIST'].isin(reservations.Nodes.unique()), 'reserved'] = 'yes'
     if pending_res is not None:
         sinfo_df.loc[sinfo_df['NODELIST'].isin(pending_res.Nodes.unique()), 'reserved'] = 'pending'
-
+    if return_raw:
+        return sinfo_df
+    
     return sinfo_df.apply(_node_from_sinfo, axis=1).tolist()
 
 

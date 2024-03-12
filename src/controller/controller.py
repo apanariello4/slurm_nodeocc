@@ -66,7 +66,7 @@ END_DELIM_ENCODED = "!}$".encode('utf-8')
 EXTRA_MSG_BEGIN_DELIM = "!{#"
 MAX_BUF = 65535
 MAX_MSG_LEN = 1024 * 1024 * 1024
-JOB_LIMIT_PER_MSG = 100
+JOB_LIMIT_PER_MSG = 60
 
 parser = argparse.ArgumentParser(description='Visualize slurm jobs')
 parser.add_argument('--debug', action='store_true', help='Enable logging')

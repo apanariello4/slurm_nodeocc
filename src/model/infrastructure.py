@@ -10,6 +10,7 @@ class Node:
     def __init__(self, name, n_gpus, gpu_model, reserved, status, cpus, mem) -> None:
         self.name = name
         self.n_gpus = n_gpus
+        # self.feature = feature
         self.gpu_model = gpu_model
         self.reserved = reserved
         assert reserved in ('no', 'yes', 'pending')

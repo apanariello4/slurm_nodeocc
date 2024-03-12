@@ -1,6 +1,7 @@
 import random
 
 import pandas as pd
+import numpy as np
 
 from view.styles import _format_to, cmdstyle
 from view.utils import is_cvcs_viz, is_student_viz, maintenance_status, to_font
@@ -98,6 +99,8 @@ cpu_drain = '△'
 cpu_pendr = '⧖'
 cpu_paused = '▚'
 cpu_down = '⨯'
+
+GLOBAL_NODES = None
 
 
 def get_ram_block(megs):
@@ -356,9 +359,6 @@ def get_cpu_icon(stat):
     }.get(stat, cpu_avail)
 
 
-GPU_MEM = {"K80": 12, "P100": 16, "1080": 11, "TitanXP": 12, "2080": 11, "RTX5000": 16, "RTX6000": 24, "RTXA5000": 24, "A40": 48}
-
-
 def view_viz_cpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None):
     # this is for hot reload
     if not work:
@@ -490,13 +490,22 @@ def view_viz_info(infrastructure, jobs, work=True, stylefn=cmdstyle, current_use
     if not work:
         return "UPDATE IN PROGRESS - PLZ W8 M8 B8"
 
+    global GLOBAL_NODES
+    if GLOBAL_NODES is None:
+        from readers.slurmreader import _read_nodes, _node_preproc
+        GLOBAL_NODES = _read_nodes(return_raw=True)
+        GLOBAL_NODES.loc[:, 'nodename'] = GLOBAL_NODES.NODELIST.apply(_node_preproc)
+        prior = ['n/a', None, 'A40', 'RTXA5000', 'RTX6000', 'RTX5000', '2080', 'V100', '1080', 'P100', 'K80']
+        reord_idx = sorted(zip(GLOBAL_NODES['m_gpu'], GLOBAL_NODES.index), key=lambda g: prior.index(g[0].split(',')[0]) if g[0].split(',')[0] in prior else -1)
+        GLOBAL_NODES = GLOBAL_NODES.loc[np.array([i for x, i in reord_idx])].reset_index(drop=True)
+
     # who is the current user?
     if current_user is None:
         import os
         current_user = os.path.basename(os.environ['HOME'])
 
-    nodes = infrastructure.get_sorted_nodes()
-    infrast_down = all([x.status == 'down' for x in nodes])
+    # nodes = infrastructure.get_sorted_nodes()
+    infrast_down = all([x.status == 'down' for x in infrastructure.get_sorted_nodes()])
 
     class RetScope:
         return_string = ''
@@ -506,27 +515,34 @@ def view_viz_info(infrastructure, jobs, work=True, stylefn=cmdstyle, current_use
 
     if not infrast_down:
         stalled_jobs = sum([j.state == 'S' for j in jobs])
-        max_gpu_len = max([len(n.gpu_model) + len(str(n.n_gpus)) if n.gpu_model is not None else 0 for n in nodes])
-        max_n_gpu_len = max([len(str(n.n_gpus)) for n in nodes])
-        max_cpu_len = max([len(str(n.cpus)) for n in nodes] + [len('CPUs')])
-        max_ram_len = max([len(str(n.mem // 1024)) for n in nodes])
-        RetScope.return_string += f'{"":{gpu_name_chars}} {"GPUs":{max_gpu_len+1}}\n'
-        for n in nodes:
-            gpu_model = n.gpu_model if n.gpu_model is not None else 'N/A'
+        # max_gpu_len = max([len(n.gpu_model) + len(str(n.n_gpus)) if n.gpu_model is not None else 0 for n in nodes])
+        # max_n_gpu_len = max([len(str(n.n_gpus)) for n in nodes])
+        # max_cpu_len = max([len(str(n.cpus)) for n in nodes] + [len('CPUs')])
+        # max_ram_len = max([len(str(n.mem // 1024)) for n in nodes])
+        feat_str = stylefn("GREEN", "FEATURES")
+        RetScope.return_string += f'{"":{gpu_name_chars}} GPU {feat_str}\n'
+        for i, n in GLOBAL_NODES.iterrows():
+            gpu_model = n.m_gpu  # if n.m_gpu is not None else 'N/A'
             # gpu_mem = n.gpu_mem if n.gpu_mem is not None else 'N/A'
-            mem = n.mem // 1024 if n.mem is not None else 'N/A'
-            n_gpus = n.n_gpus if n.n_gpus is not None else 'N/A'
-            n_cpus = n.cpus if n.cpus is not None else 'N/A'
+            mem = n.MEMORY // 1024 if n.MEMORY is not None else 'N/A'
+            n_gpus = n.n_gpu if n.n_gpu is not None else 'N/A'
+            n_cpus = n.CPUS  # if n.CPUS is not None else 'N/A'
             # gpu_mem = GPU_MEM.get(gpu_model, 'N/A')
-            gpu_mem = ','.join([str(GPU_MEM.get(x, 'N/A')) for x in gpu_model.split(',')])
+
+            gpu_feature = n.AVAIL_FEATURES  # if n.feature is not None else '(null)'
+
+            # gpu_mem = ','.join([str(GPU_MEM.get(x, 'N/A')) for x in gpu_model.split(',')])
             # gpu_str = f'{n_gpus}x{gpu_model:{max_gpu_len-(1*(len(str(n_gpus))))}}' if n_gpus != 0 else f'{"N/A":{max_gpu_len+1}}'
             if n_gpus != 0:
                 gpu_str = f'{stylefn("RED", str(n_gpus))}'
-                gpu_str += f'x{stylefn("YELLOW", gpu_model)}'
-                gpu_str += f'@{stylefn("GREEN", str(gpu_mem))}G'
+                if gpu_feature != '(null)':
+                    gpu_str += f'x{stylefn("GREEN", gpu_feature)}'
+                else:
+                    gpu_str += f'@({stylefn("YELLOW", gpu_model)})'
             else:
-                gpu_str = f'{"N/A":{max_gpu_len+1}}'
-            RetScope.return_string += f'{_format_to(n.name, gpu_name_chars, "right")} {gpu_str}\n'
+                gpu_str = "N/A"  # f'{"N/A":{max_gpu_len+1}}'
+
+            RetScope.return_string += f'{_format_to(n.nodename, gpu_name_chars, "right")} {gpu_str}\n'
             # RetScope.return_string += f'{"":{gpu_name_chars}} {"VRAM":{max_gpu_len+1}} {f"{mem}G"}\n'
 
     onmain, waitString = maintenance_status(infrastructure)
