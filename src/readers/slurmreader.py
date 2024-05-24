@@ -85,8 +85,10 @@ def _read_maintenances():
     if not len(reservations):
         return [], None, None
     reservations = pd.DataFrame.from_records(reservations)
-    reservations['StartTime'] = str(pd.to_datetime(reservations['StartTime']))
-    reservations['EndTime'] = str(pd.to_datetime(reservations['EndTime']))
+    reservations['StartTime'] = reservations['StartTime'].apply(lambda x:str(pd.to_datetime(x)))
+    reservations['EndTime'] = reservations['EndTime'].apply(lambda x:str(pd.to_datetime(x)))
+    # reservations['StartTime'] = str(pd.to_datetime(reservations['StartTime']))
+    # reservations['EndTime'] = str(pd.to_datetime(reservations['EndTime']))
     reservations = _split_column(reservations, 'Nodes')
     maint_flag = reservations['Flags'].str.contains('MAINT') & \
         reservations['Flags'].str.contains('SPEC_NODES') & \

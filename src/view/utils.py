@@ -22,8 +22,12 @@ def to_datetime(time_str):
     return np.datetime64(re.match(r'\d+\s+(.*)\n', str(time_str)).group(1))
 
 
-def to_datetime(time_str):
-    return np.datetime64(re.match(r'\d+\s+(.*)\n', str(time_str)).group(1))
+def to_datetime(time_str): 
+    try:
+        dt = np.datetime64(re.match(r'\d+\s+(.*)\n', str(time_str)).group(1))
+    except:
+        dt = np.datetime64(str(time_str))
+    return dt
 
 
 def maintenance_status(infrastructure):
