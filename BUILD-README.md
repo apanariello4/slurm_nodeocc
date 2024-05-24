@@ -1,4 +1,4 @@
 - remove prev build rm -rf build/ dist/
-- build python -m build
 - change version in toml file
+- build python -m build
 - upload twine upload dist/nodeocc-x.y.z*
