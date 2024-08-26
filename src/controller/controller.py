@@ -60,7 +60,6 @@ except Exception as e:
     newest_version = '?.?.?'
     time.sleep(5)
 
-
 BEGIN_DELIM = "!{$"
 END_DELIM_ENCODED = "!}$".encode('utf-8')
 EXTRA_MSG_BEGIN_DELIM = "!{#"
@@ -81,13 +80,17 @@ assert os.access(args.basepath, os.R_OK), f"Base path {args.basepath} not readab
 # export args
 orig_instance = Singleton.getInstance(args)
 
-last_update = os.path.getmtime(conf_path + "/view/slurm_viz.py")
-if os.path.getmtime(conf_path + "/view/slurm_list.py") > last_update:
-    last_update = os.path.getmtime(conf_path + "/view/slurm_list.py")
-if os.path.getmtime(conf_path + "/view/styles.py") > last_update:
-    last_update = os.path.getmtime(conf_path + "/view/styles.py")
-if os.path.getmtime(conf_path + "/readers/slurmreader.py") > last_update:
-    last_update = os.path.getmtime(conf_path + "/readers/slurmreader.py")
+try:
+    last_update = os.path.getmtime(conf_path + "/view/slurm_viz.py")
+    if os.path.getmtime(conf_path + "/view/slurm_list.py") > last_update:
+        last_update = os.path.getmtime(conf_path + "/view/slurm_list.py")
+    if os.path.getmtime(conf_path + "/view/styles.py") > last_update:
+        last_update = os.path.getmtime(conf_path + "/view/styles.py")
+    if os.path.getmtime(conf_path + "/readers/slurmreader.py") > last_update:
+        last_update = os.path.getmtime(conf_path + "/readers/slurmreader.py")
+except Exception as e:
+    orig_instance.err(f"Could not get last update time: {e}")
+    last_update = time.time()
 
 
 def get_avg_wait_time(instance: Singleton):
@@ -301,8 +304,7 @@ def _main():
         wrapper(display_main)
 
 
-if __name__ == '__main__':
-    _main()
+_main()
 
 orig_instance.cleanup()
 exit(0)

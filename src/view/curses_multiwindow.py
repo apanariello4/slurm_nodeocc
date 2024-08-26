@@ -99,6 +99,9 @@ class Singleton:
         else:
             Singleton.__instance = self
 
+        self.args = args
+        self.setup_logging()
+
         self.try_open_counter = 0
         self.voff = 0
         self.mouse_state = {}
@@ -110,7 +113,6 @@ class Singleton:
         self.fetch_fn = None
         self.view_mode = 'gpu'
         self.job_id_type = 'agg'
-        self.args = args
 
         self.show_account = False
         self.show_prio = False
@@ -146,8 +148,6 @@ class Singleton:
             Path(port_filepath).unlink()
 
         self.is_master = not self.check_existing_master_running()
-
-        self.setup_logging()
 
         if self.is_master:
             # clean up old port files
