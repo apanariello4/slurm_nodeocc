@@ -1,5 +1,7 @@
 import asyncio
 import curses
+import random
+import psutil
 import grp
 import logging
 import os
@@ -10,7 +12,6 @@ import time
 import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-
 from view import update_views
 
 a_filter_values = [None, 'me', 'prod', 'stud', 'cvcs']
@@ -56,19 +57,40 @@ class Singleton:
     __instance = None
 
     @staticmethod
-    def getInstance(args=None):
+    def getInstance(args=None, create=True):
         """ Static access method. """
         if Singleton.__instance is None:
+            if not create:
+                return None
             Singleton(args)
         if args is not None:
             Singleton.__instance.args = args
         return Singleton.__instance
 
     # destructor
-    def __del__(self):
-        if self.args.master:
+    def cleanup(self):
+        if self.is_master:
             if self.port_file_exists():
-                Path(self.get_port_file_name()[1]).unlink()
+                os.system(f"rm {self.get_port_file_name()[1]}")
+        if hasattr(self, 'sock') and self.sock is not None:
+            self.sock.close()
+
+    def setup_logging(self):
+        if self.args.master_only:
+            handler = RotatingFileHandler(os.path.join(self.basepath, '.master_log.txt'), maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
+            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
+                                handlers=[handler])
+        # set logging file
+        elif self.args.debug:
+            # create rotating file handler
+            handler = RotatingFileHandler(os.path.expanduser('~') + '/.nodeocc_log.txt', maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
+            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
+                                handlers=[handler])
+
+    def clean_port_files(self):
+        for f in os.listdir(self.basepath):
+            if f.endswith('.port'):
+                os.system(f"rm {os.path.join(self.basepath, f)}")
 
     def __init__(self, args=None):
         """ Virtually private constructor. """
@@ -76,6 +98,7 @@ class Singleton:
             raise Exception("This class is a singleton!")
         else:
             Singleton.__instance = self
+
         self.try_open_counter = 0
         self.voff = 0
         self.mouse_state = {}
@@ -106,36 +129,29 @@ class Singleton:
 
         self.basepath = self.args.basepath
 
-        if self.args.daemon_only:
-            handler = RotatingFileHandler(os.path.join(self.basepath, '.master_log.txt'), maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
-            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
-                                handlers=[handler])
-        # set logging file
-        elif self.args.debug:
-            # create rotating file handler
-            handler = RotatingFileHandler(os.path.expanduser('~') + '/.nodeocc_log.txt', maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
-            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
-                                handlers=[handler])
+        # check if any .port file exists
+        if args.force_override and self.port_file_exists():
+            _, port_filepath = self.get_port_file_name()
 
-        if self.args.master:
-            # check if any .port file exists
-            if self.port_file_exists():
-                if self.args.force_override:
-                    _, port_filepath = self.get_port_file_name()
+            # read pid from file
+            pid = Path(port_filepath).read_text()
+            # kill process
+            try:
+                os.kill(int(pid), signal.SIGTERM)
+            except Exception as e:
+                self.log("Could not kill process, deleting port file")
+                self.log(e)
 
-                    # read pid from file
-                    pid = Path(port_filepath).read_text()
-                    # kill process
-                    try:
-                        os.kill(int(pid), signal.SIGTERM)
-                    except Exception as e:
-                        self.log("Could not kill process, deleting port file")
-                        self.log(e)
+            # delete port file
+            Path(port_filepath).unlink()
 
-                    # delete port file
-                    Path(port_filepath).unlink()
-                else:
-                    raise Exception("Master already running")
+        self.is_master = not self.check_existing_master_running()
+
+        self.setup_logging()
+
+        if self.is_master:
+            # clean up old port files
+            self.clean_port_files()
             self.port = self.create_socket_as_master()
         else:
             try_open_socket_as_slave(self)
@@ -146,11 +162,12 @@ class Singleton:
             return fname, os.path.join(self.basepath, fname)
         return None
 
-    def check_port_file_master(self):
+    def check_existing_master_running(self):
         if self.port_file_exists():
-            prev_port = int(self.get_port_file_name()[0].split('.')[0])
-            if hasattr(self, 'port'):
-                return self.port == prev_port
+            # check if process is still running
+            pid = Path(self.get_port_file_name()[1]).read_text()
+            if pid and int(pid) != os.getpid():
+                return psutil.pid_exists(int(pid))
         return False
 
     def port_file_exists(self):
@@ -213,11 +230,11 @@ class Singleton:
             self._ctime = _ntime
 
     def err(self, msg):
-        if self.args.debug or self.args.daemon_only:
+        if self.args.debug or self.args.master_only:
             logging.error(msg)
 
     def log(self, msg):
-        if self.args.debug or self.args.daemon_only:
+        if self.args.debug or self.args.master_only:
             logging.info(msg)
 
     async def fetch(self):
@@ -225,12 +242,14 @@ class Singleton:
 
         if self.fetch_fn is not None:
             inf, jobs, avg_wait_time = await self.fetch_fn()  # a_filter_values[self.a_filter])
+            master_dead = inf is None
             self.inf = inf if inf is not None else self.inf
             self.jobs = jobs if jobs is not None else self.jobs
             self.avg_wait_time = avg_wait_time if avg_wait_time is not None else self.avg_wait_time
 
         _delta_t = time.time() - _ctime
         self.log(f"Fetch took {_delta_t:.2f} seconds")
+        return master_dead
 
     def add_button(self, y, x, width, action):
         if y not in self.mouse_state:
@@ -514,10 +533,25 @@ def get_char_async(stdscr, instance):
     os.kill(os.getpid(), signal.SIGINT)
 
 
-async def update_screen_info(stdscr, instance):
+async def update_screen_info(stdscr, instance: Singleton):
     while instance.k not in BUTTON_ACTIONS['quit']:
-        await instance.fetch()
-        instance.log("GOT DATA FROM MASTER")
+        master_dead = await instance.fetch()
+        if not master_dead:
+            instance.log("GOT DATA FROM MASTER")
+        else:
+            if not instance.check_existing_master_running():
+                random_wait_time_ms = random.randint(100, 10000)
+                instance.log("MASTER DEAD, WAITING " + str(random_wait_time_ms) + "ms")
+
+                # WARNING: Possible race-condition here, if master dies and slave tries to become master
+                await asyncio.sleep(random_wait_time_ms / 1000)
+                if not instance.check_existing_master_running():
+                    instance.log("MASTER STILL DEAD, TRYING TO BECOME MASTER")
+                    instance.setup_logging()
+                    instance.clean_port_files()
+                    instance.port = instance.create_socket_as_master()
+                    instance.is_master = True
+
         update_screen(stdscr, instance)
 
 
@@ -592,7 +626,7 @@ async def main(stdscr):
 
     def exit_handler(sig, frame):
         instance.log(f"FORCED EXIT...")
-        instance.sock.close()
+        instance.cleanup()
         exit(0)
     signal.signal(signal.SIGINT, exit_handler)
 
