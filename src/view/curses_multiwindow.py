@@ -13,6 +13,7 @@ import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from view import update_views
+import stat
 
 a_filter_values = [None, 'me', 'prod', 'stud', 'cvcs']
 
@@ -33,6 +34,14 @@ BUTTON_ACTIONS = {
     'refresh': [ord('y')],
     'info': [ord('i')],
 }
+
+
+def is_file_writable_byall(file_path):
+    return os.stat(file_path).st_mode & stat.S_IWOTH
+
+
+def is_file_readable_byall(file_path):
+    return os.stat(file_path).st_mode & stat.S_IROTH
 
 
 def try_open_socket_as_slave(instance):
@@ -89,7 +98,7 @@ class Singleton:
 
     def clean_port_files(self):
         for f in os.listdir(self.basepath):
-            if f.endswith('.port'):
+            if f.endswith('.port') and is_file_writable_byall(os.path.join(self.basepath, f)):
                 os.system(f"rm {os.path.join(self.basepath, f)}")
 
     def __init__(self, args=None):
@@ -158,8 +167,11 @@ class Singleton:
 
     def get_port_file_name(self):
         if self.port_file_exists():
-            fname = [f for f in os.listdir(self.basepath) if f.endswith('.port')][0]
-            return fname, os.path.join(self.basepath, fname)
+            portfiles = [f for f in os.listdir(self.basepath) if f.endswith('.port')]
+            portfiles = [(f, os.path.join(self.basepath, f)) for f in portfiles]
+            portfiles = [(fname, fpath) for fname, fpath in portfiles if is_file_readable_byall(fpath) and is_file_writable_byall(fpath)][0]
+
+            return portfiles[0], portfiles[1]
         return None
 
     def check_existing_master_running(self):
@@ -171,7 +183,15 @@ class Singleton:
         return False
 
     def port_file_exists(self):
-        return len([f for f in os.listdir(self.basepath) if f.endswith('.port')]) > 0
+        """
+        Check if a port file exists in the basepath and the file has 666 permissions
+        """
+        portfiles = [f for f in os.listdir(self.basepath) if f.endswith('.port')]
+        if len(portfiles) == 0:
+            return False
+        portfiles = [os.path.join(self.basepath, f) for f in portfiles]
+        portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
+        return len(portfiles) > 0
 
     def create_socket_as_master(self):
         # create udp socket for broadcasting
@@ -191,8 +211,10 @@ class Singleton:
         # get pid of current process
         self.pid = os.getpid()
 
-        # create file to store port
-        Path(self.basepath, f'{self.port}.port').write_text(str(self.pid))
+        # create file to store port with 666 permissions to file
+        filepath = Path(self.basepath, f'{self.port}.port')
+        filepath.write_text(str(self.pid))
+        os.chmod(filepath, 0o666)
 
         return self.port
 
