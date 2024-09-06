@@ -48,7 +48,7 @@ def try_open_socket_as_slave(instance):
     if len(instance.get_port_files()) == 0:
         raise Exception("No master running")
 
-    cur_port = [f.split('.')[0].split('master_')[1] for f in instance.get_port_files()
+    cur_port = [int(f.split('.')[0].split('master_')[1]) for f in instance.get_port_files()
                 if (pid := Path(f).read_text()) and psutil.pid_exists(int(pid))][0]
 
     if hasattr(instance, 'port'):
