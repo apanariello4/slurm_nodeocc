@@ -93,7 +93,7 @@ class Singleton:
     def clean_port_files(self):
         nodename = socket.getfqdn().split('.')[0]
         for f in os.listdir(self.basepath):
-            if nodename in f and 'master_' in f and f.endswith('.port') and is_file_writable_byall(os.path.join(self.basepath, f)):
+            if nodename in f and 'master_' in f and f.endswith('.portfile') and is_file_writable_byall(os.path.join(self.basepath, f)):
                 # read pid from file
                 pid = Path(os.path.join(self.basepath, f)).read_text()
                 # assert no process is running
@@ -166,7 +166,7 @@ class Singleton:
         """
         nodename = socket.getfqdn().split('.')[0]
         portfiles = [os.path.join(self.basepath, f) for f in os.listdir(self.basepath)
-                     if f.endswith('.port') and 'master_' in f and nodename in f]
+                     if f.endswith('.portfile') and 'master_' in f and nodename in f]
         portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
         return portfiles
 
@@ -197,9 +197,11 @@ class Singleton:
 
         try:
             # create file to store port with 666 permissions to file
-            filepath = Path(self.basepath, f'{nodename}_master_{self.port}.port')
+            filepath = Path(self.basepath, f'{nodename}_master_{self.port}.portfile')
             filepath.write_text(str(self.pid))
             os.chmod(filepath, 0o666)
+
+            self.port_filepath = filepath
         except Exception as e:
             self.err(f"Could not create port file: {e}")
             self.err(traceback.format_exc())
@@ -641,6 +643,18 @@ async def main(stdscr):
     instance.right_width = 33
 
     stdscr.clear()
+
+    def exit_handler(sig, frame):
+        instance.log(f"FORCED EXIT...")
+        # instance.cleanup()
+        if hasattr(instance, 'port_filepath'):
+            os.system(f"rm {instance.port_filepath}")
+
+        if hasattr(instance, 'sock'):
+            instance.sock.close()
+
+        exit(0)
+    signal.signal(signal.SIGINT, exit_handler)
 
     # print waiting message un stdscr
     stdscr.addstr(0, 0, "Waiting for data from master...")
