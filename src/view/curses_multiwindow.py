@@ -91,8 +91,9 @@ class Singleton:
                                 handlers=[handler])
 
     def clean_port_files(self):
+        nodename = socket.getfqdn().split('.')[0]
         for f in os.listdir(self.basepath):
-            if f.startswith('master_') and f.endswith('.port') and is_file_writable_byall(os.path.join(self.basepath, f)):
+            if nodename in f and 'master_' in f and f.endswith('.port') and is_file_writable_byall(os.path.join(self.basepath, f)):
                 # read pid from file
                 pid = Path(os.path.join(self.basepath, f)).read_text()
                 # assert no process is running
@@ -163,12 +164,15 @@ class Singleton:
         """
         Check if a port file exists in the basepath and the file has 666 permissions
         """
+        nodename = socket.getfqdn().split('.')[0]
         portfiles = [os.path.join(self.basepath, f) for f in os.listdir(self.basepath)
-                     if f.endswith('.port') and f.startswith('master_')]
+                     if f.endswith('.port') and 'master_' in f and nodename in f]
         portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
         return portfiles
 
     def create_socket_as_master(self):
+        nodename = socket.getfqdn().split('.')[0]
+
         # create udp socket for broadcasting
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 
@@ -193,7 +197,7 @@ class Singleton:
 
         try:
             # create file to store port with 666 permissions to file
-            filepath = Path(self.basepath, f'master_{self.port}.port')
+            filepath = Path(self.basepath, f'{nodename}_master_{self.port}.port')
             filepath.write_text(str(self.pid))
             os.chmod(filepath, 0o666)
         except Exception as e:
