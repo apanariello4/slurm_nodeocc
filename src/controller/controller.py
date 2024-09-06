@@ -70,7 +70,6 @@ JOB_LIMIT_PER_MSG = 60
 parser = argparse.ArgumentParser(description='Visualize slurm jobs')
 parser.add_argument('--debug', action='store_true', help='Enable logging')
 parser.add_argument('--master_only', action='store_true', help='Disable all prints - only run in background')
-parser.add_argument('--force_override', action='store_true', help='Force override of port file, kill previous instance')
 parser.add_argument('--basepath', type=str, default='/nas/softechict-nas-2/mboschini/cool_scripts/new_nodeocc/', help='Base path for nodeocc. Must be readable by all users')
 args = parser.parse_args()
 
@@ -123,7 +122,6 @@ def send_msg(instance: Singleton, msg, n_extra_msgs=0, is_extra=False):
 def update_data_master(instance: Singleton):
     if instance.check_existing_master_running():
         instance.log(f"Master already running, killing current instance")
-        instance.cleanup()
         exit(0)
 
     inf = readers.slurmreader.read_infrastructure()
@@ -271,16 +269,6 @@ def _main():
         assert orig_instance.is_master, "Instance is not `master`, run with `force_override` to override"
 
         orig_instance.log(f"Starting master daemon")
-        # register atexit
-        import atexit
-
-        def exit_handler():
-            orig_instance.log(f"Exiting...")
-            orig_instance.sock.close()
-            # remove .port file
-            if orig_instance.port_file_exists():
-                Path(orig_instance.get_port_file_name()[1]).unlink()
-        atexit.register(exit_handler)
 
         while True:
             orig_instance.timeme(f"Updating...")
@@ -306,5 +294,4 @@ def _main():
 
 _main()
 
-orig_instance.cleanup()
 exit(0)

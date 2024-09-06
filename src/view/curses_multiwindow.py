@@ -45,10 +45,12 @@ def is_file_readable_byall(file_path):
 
 
 def try_open_socket_as_slave(instance):
-    if not instance.port_file_exists():
+    if len(instance.get_port_files()) == 0:
         raise Exception("No master running")
 
-    cur_port = int(instance.get_port_file_name()[0].split('.')[0])
+    cur_port = [f.split('.')[0].split('master_')[1] for f in instance.get_port_files()
+                if (pid := Path(f).read_text()) and psutil.pid_exists(int(pid))][0]
+
     if hasattr(instance, 'port'):
         # check if port file has same name
         if instance.port != cur_port:
@@ -76,14 +78,6 @@ class Singleton:
             Singleton.__instance.args = args
         return Singleton.__instance
 
-    # destructor
-    def cleanup(self):
-        if self.is_master:
-            if self.port_file_exists():
-                os.system(f"rm {self.get_port_file_name()[1]}")
-        if hasattr(self, 'sock') and self.sock is not None:
-            self.sock.close()
-
     def setup_logging(self):
         if self.args.master_only:
             handler = RotatingFileHandler(os.path.join(self.basepath, '.master_log.txt'), maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
@@ -98,8 +92,16 @@ class Singleton:
 
     def clean_port_files(self):
         for f in os.listdir(self.basepath):
-            if f.endswith('.port') and is_file_writable_byall(os.path.join(self.basepath, f)):
+            if f.startswith('master_') and f.endswith('.port') and is_file_writable_byall(os.path.join(self.basepath, f)):
+                # read pid from file
+                pid = Path(os.path.join(self.basepath, f)).read_text()
+                # assert no process is running
+                if psutil.pid_exists(int(pid)):
+                    self.log(f"Process {pid} is still running, killing self")
+                    return False
+
                 os.system(f"rm {os.path.join(self.basepath, f)}")
+        return True
 
     def __init__(self, args=None):
         """ Virtually private constructor. """
@@ -140,58 +142,31 @@ class Singleton:
 
         self.basepath = self.args.basepath
 
-        # check if any .port file exists
-        if args.force_override and self.port_file_exists():
-            _, port_filepath = self.get_port_file_name()
-
-            # read pid from file
-            pid = Path(port_filepath).read_text()
-            # kill process
-            try:
-                os.kill(int(pid), signal.SIGTERM)
-            except Exception as e:
-                self.log("Could not kill process, deleting port file")
-                self.log(e)
-
-            # delete port file
-            Path(port_filepath).unlink()
-
         self.is_master = not self.check_existing_master_running()
 
         if self.is_master:
-            # clean up old port files
-            self.clean_port_files()
             self.port = self.create_socket_as_master()
         else:
             try_open_socket_as_slave(self)
 
-    def get_port_file_name(self):
-        if self.port_file_exists():
-            portfiles = [f for f in os.listdir(self.basepath) if f.endswith('.port')]
-            portfiles = [(f, os.path.join(self.basepath, f)) for f in portfiles]
-            portfiles = [(fname, fpath) for fname, fpath in portfiles if is_file_readable_byall(fpath) and is_file_writable_byall(fpath)][0]
-
-            return portfiles[0], portfiles[1]
-        return None
-
     def check_existing_master_running(self):
-        if self.port_file_exists():
-            # check if process is still running
-            pid = Path(self.get_port_file_name()[1]).read_text()
-            if pid and int(pid) != os.getpid():
-                return psutil.pid_exists(int(pid))
+        portfiles = self.get_port_files()
+        if len(portfiles) > 0:
+            for f in portfiles:
+                # check if process is still running
+                pid = Path(f).read_text()
+                if pid and int(pid) != os.getpid():
+                    return psutil.pid_exists(int(pid))
         return False
 
-    def port_file_exists(self):
+    def get_port_files(self):
         """
         Check if a port file exists in the basepath and the file has 666 permissions
         """
-        portfiles = [f for f in os.listdir(self.basepath) if f.endswith('.port')]
-        if len(portfiles) == 0:
-            return False
-        portfiles = [os.path.join(self.basepath, f) for f in portfiles]
+        portfiles = [os.path.join(self.basepath, f) for f in os.listdir(self.basepath)
+                     if f.endswith('.port') and f.startswith('master_')]
         portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
-        return len(portfiles) > 0
+        return portfiles
 
     def create_socket_as_master(self):
         # create udp socket for broadcasting
@@ -211,10 +186,24 @@ class Singleton:
         # get pid of current process
         self.pid = os.getpid()
 
-        # create file to store port with 666 permissions to file
-        filepath = Path(self.basepath, f'{self.port}.port')
-        filepath.write_text(str(self.pid))
-        os.chmod(filepath, 0o666)
+        # clean up old port files
+        kill_ok = self.clean_port_files()
+        if not kill_ok:
+            return None
+
+        try:
+            # create file to store port with 666 permissions to file
+            filepath = Path(self.basepath, f'master_{self.port}.port')
+            filepath.write_text(str(self.pid))
+            os.chmod(filepath, 0o666)
+        except Exception as e:
+            self.err(f"Could not create port file: {e}")
+            self.err(traceback.format_exc())
+            # check if file exists
+            if filepath.exists():
+                # delete file
+                os.system(f"rm {filepath}")
+            return None
 
         return self.port
 
@@ -570,9 +559,12 @@ async def update_screen_info(stdscr, instance: Singleton):
                 if not instance.check_existing_master_running():
                     instance.log("MASTER STILL DEAD, TRYING TO BECOME MASTER")
                     instance.setup_logging()
-                    instance.clean_port_files()
                     instance.port = instance.create_socket_as_master()
                     instance.is_master = True
+                else:
+                    try_open_socket_as_slave(instance)
+            else:
+                try_open_socket_as_slave(instance)
 
         update_screen(stdscr, instance)
 
@@ -645,12 +637,6 @@ async def main(stdscr):
     instance.right_width = 33
 
     stdscr.clear()
-
-    def exit_handler(sig, frame):
-        instance.log(f"FORCED EXIT...")
-        instance.cleanup()
-        exit(0)
-    signal.signal(signal.SIGINT, exit_handler)
 
     # print waiting message un stdscr
     stdscr.addstr(0, 0, "Waiting for data from master...")
