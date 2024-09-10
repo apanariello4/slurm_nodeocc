@@ -60,7 +60,6 @@ except Exception as e:
     newest_version = '?.?.?'
     time.sleep(5)
 
-
 BEGIN_DELIM = "!{$"
 END_DELIM_ENCODED = "!}$".encode('utf-8')
 EXTRA_MSG_BEGIN_DELIM = "!{#"
@@ -70,9 +69,7 @@ JOB_LIMIT_PER_MSG = 60
 
 parser = argparse.ArgumentParser(description='Visualize slurm jobs')
 parser.add_argument('--debug', action='store_true', help='Enable logging')
-parser.add_argument('--master', action='store_true', help='Start master process')
-parser.add_argument('--daemon_only', action='store_true', help='Disable all prints - only run in background')
-parser.add_argument('--force_override', action='store_true', help='Force override of port file, kill previous instance')
+parser.add_argument('--master_only', action='store_true', help='Disable all prints - only run in background')
 parser.add_argument('--basepath', type=str, default='/nas/softechict-nas-2/mboschini/cool_scripts/new_nodeocc/', help='Base path for nodeocc. Must be readable by all users')
 args = parser.parse_args()
 
@@ -80,15 +77,19 @@ args = parser.parse_args()
 assert os.access(args.basepath, os.R_OK), f"Base path {args.basepath} not readable"
 
 # export args
-Singleton.getInstance(args)
+orig_instance = Singleton.getInstance(args)
 
-last_update = os.path.getmtime(conf_path + "/view/slurm_viz.py")
-if os.path.getmtime(conf_path + "/view/slurm_list.py") > last_update:
-    last_update = os.path.getmtime(conf_path + "/view/slurm_list.py")
-if os.path.getmtime(conf_path + "/view/styles.py") > last_update:
-    last_update = os.path.getmtime(conf_path + "/view/styles.py")
-if os.path.getmtime(conf_path + "/readers/slurmreader.py") > last_update:
-    last_update = os.path.getmtime(conf_path + "/readers/slurmreader.py")
+try:
+    last_update = os.path.getmtime(conf_path + "/view/slurm_viz.py")
+    if os.path.getmtime(conf_path + "/view/slurm_list.py") > last_update:
+        last_update = os.path.getmtime(conf_path + "/view/slurm_list.py")
+    if os.path.getmtime(conf_path + "/view/styles.py") > last_update:
+        last_update = os.path.getmtime(conf_path + "/view/styles.py")
+    if os.path.getmtime(conf_path + "/readers/slurmreader.py") > last_update:
+        last_update = os.path.getmtime(conf_path + "/readers/slurmreader.py")
+except Exception as e:
+    orig_instance.err(f"Could not get last update time: {e}")
+    last_update = time.time()
 
 
 def get_avg_wait_time(instance: Singleton):
@@ -104,7 +105,8 @@ def get_avg_wait_time(instance: Singleton):
         instance.err(traceback.format_exc())
         return 'err', 'err'
 
-def send_msg(instance, msg, n_extra_msgs=0, is_extra=False):
+
+def send_msg(instance: Singleton, msg, n_extra_msgs=0, is_extra=False):
     # msg to bytes
     msg = msg.encode('utf-8')
     begin_delim = EXTRA_MSG_BEGIN_DELIM if is_extra else BEGIN_DELIM
@@ -116,11 +118,10 @@ def send_msg(instance, msg, n_extra_msgs=0, is_extra=False):
 
     instance.sock.sendto(msg, ('<broadcast>', instance.port))
 
-def update_data_master(instance):
-    if not instance.check_port_file_master():
-        instance.log(f"Port file dead, killing current instance")
-        instance.sock.close()
-        del instance
+
+def update_data_master(instance: Singleton):
+    if instance.check_existing_master_running():
+        instance.log(f"Master already running, killing current instance")
         exit(0)
 
     inf = readers.slurmreader.read_infrastructure()
@@ -135,10 +136,10 @@ def update_data_master(instance):
     queue_jobs = sorted(queue_jobs, key=lambda x: x['priority'], reverse=True)
     maxlen = min(JOB_LIMIT_PER_MSG, len(running_jobs) + len(queue_jobs))
 
+
     queue_jobs, extra_queue_jobs = queue_jobs[:maxlen - len(running_jobs)], queue_jobs[maxlen - len(running_jobs):]
     cur_timestamp = time.time()
     msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs, 'ts': str(cur_timestamp)})
-
 
     N_EXTRA_MSGS = (len(extra_queue_jobs) // JOB_LIMIT_PER_MSG) + 1 if len(extra_queue_jobs) > 0 else 0
     send_msg(instance, msg, n_extra_msgs=N_EXTRA_MSGS)
@@ -154,6 +155,7 @@ def update_data_master(instance):
 
     return inf, jobs
 
+
 def decode_msg_slave(data, delim=BEGIN_DELIM):
     data = data.split(END_DELIM_ENCODED)[0]
     data = data.decode('utf-8')
@@ -165,8 +167,9 @@ def decode_msg_slave(data, delim=BEGIN_DELIM):
     avg_wait_time = "N/A"  # get_avg_wait_time(instance)
     return inf, jobs, avg_wait_time, msg
 
+
 async def get_data_slave(instance):
-    inf, jobs = None, None
+    inf, jobs, avg_wait_time = None, None, None
     try:
         # listen for data from master
         # instance.sock.settimeout(6.5)
@@ -182,8 +185,8 @@ async def get_data_slave(instance):
             orig_timestamp = float(decoded_msg['ts'])
 
             total_msg_n = n_msgs_remaining
-            msg_store = {i:[] for i in range(total_msg_n)}
-            while n_msgs_remaining>0:
+            msg_store = {i: [] for i in range(total_msg_n)}
+            while n_msgs_remaining > 0:
                 data, _ = instance.sock.recvfrom(MAX_BUF)
                 back_msg_idx = int(data.decode('utf-8').split(EXTRA_MSG_BEGIN_DELIM)[0])
                 msg_idx = total_msg_n - back_msg_idx - 1
@@ -226,8 +229,7 @@ async def get_all():
     updt = max(updt, os.path.getmtime(conf_path + "/view/styles.py"))
     updt = max(updt, os.path.getmtime(conf_path + "/readers/slurmreader.py"))
 
-    instance = Singleton.getInstance()
-    instance.timeme(f"Starting update")
+    orig_instance.timeme(f"Starting update")
 
     if updt > last_update:
         reload(readers.slurmreader)
@@ -236,21 +238,23 @@ async def get_all():
         reload(view.styles)
         last_update = updt
 
-    instance.timeme(f"- reload")
+    orig_instance.timeme(f"- reload")
 
     inf, jobs, avg_wait_time = None, None, None
     try:
-        if args.master:
-            inf, jobs = update_data_master(instance)
+        if orig_instance.is_master:
+            inf, jobs = update_data_master(orig_instance)
+
+            time.sleep(5)
         else:
             # loop = asyncio.get_event_loop()
-            instance.timeme(f"- listening for data")
+            orig_instance.timeme(f"- listening for data")
 
             # wait for data from master but async update the view
-            inf, jobs, avg_wait_time = await get_data_slave(instance)
+            inf, jobs, avg_wait_time = await get_data_slave(orig_instance)
     except Exception as e:
-        instance.err(f"Exception: {e}")
-        instance.err(traceback.format_exc())
+        orig_instance.err(f"Exception: {e}")
+        orig_instance.err(traceback.format_exc())
         # instance.rens = 'Something went wrong'
         # instance.nocc = ':('
 
@@ -262,43 +266,33 @@ def display_main(stdscr):
 
 
 def _main():
-    if args.daemon_only:
-        assert args.master, "Daemon mode only available for master"
-        instance = Singleton.getInstance()
+    if args.master_only:
+        assert orig_instance.is_master, "Instance is not `master`, run with `force_override` to override"
 
-        instance.log(f"Starting master daemon")
-        # register atexit
-        import atexit
-
-        def exit_handler():
-            instance.log(f"Exiting...")
-            instance.sock.close()
-            # remove .port file
-            if instance.port_file_exists():
-                Path(instance.get_port_file_name()[1]).unlink()
-        atexit.register(exit_handler)
+        orig_instance.log(f"Starting master daemon")
 
         while True:
-            instance.timeme(f"Updating...")
+            orig_instance.timeme(f"Updating...")
             try:
-                update_data_master(instance)
+                update_data_master(orig_instance)
             except Exception as e:
-                instance.err(f"Exception: {e}")
-                instance.err(traceback.format_exc())
+                orig_instance.err(f"Exception: {e}")
+                orig_instance.err(traceback.format_exc())
 
             time.sleep(5)
 
     else:
         # configure singleton
 
-        Singleton.getInstance().signature = f"{program_name} v{version_number}"
-        Singleton.getInstance().version = version_number
-        Singleton.getInstance().updated = updated
-        Singleton.getInstance().newest_version = newest_version
-        Singleton.getInstance().fetch_fn = get_all
+        orig_instance.signature = f"{program_name} v{version_number}"
+        orig_instance.version = version_number
+        orig_instance.updated = updated
+        orig_instance.newest_version = newest_version
+        orig_instance.fetch_fn = get_all
 
         wrapper(display_main)
 
 
-if __name__ == '__main__':
-    _main()
+_main()
+
+exit(0)

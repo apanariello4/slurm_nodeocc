@@ -1,5 +1,7 @@
 import asyncio
 import curses
+import random
+import psutil
 import grp
 import logging
 import os
@@ -10,8 +12,8 @@ import time
 import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-
 from view import update_views
+import stat
 
 a_filter_values = [None, 'me', 'prod', 'stud', 'cvcs']
 
@@ -34,11 +36,21 @@ BUTTON_ACTIONS = {
 }
 
 
+def is_file_writable_byall(file_path):
+    return os.stat(file_path).st_mode & stat.S_IWOTH
+
+
+def is_file_readable_byall(file_path):
+    return os.stat(file_path).st_mode & stat.S_IROTH
+
+
 def try_open_socket_as_slave(instance):
-    if not instance.port_file_exists():
+    if len(instance.get_port_files()) == 0:
         raise Exception("No master running")
 
-    cur_port = int(instance.get_port_file_name()[0].split('.')[0])
+    cur_port = [int(f.split('.')[0].split('master_')[1]) for f in instance.get_port_files()
+                if (pid := Path(f).read_text()) and psutil.pid_exists(int(pid))][0]
+
     if hasattr(instance, 'port'):
         # check if port file has same name
         if instance.port != cur_port:
@@ -56,19 +68,41 @@ class Singleton:
     __instance = None
 
     @staticmethod
-    def getInstance(args=None):
+    def getInstance(args=None, create=True):
         """ Static access method. """
         if Singleton.__instance is None:
+            if not create:
+                return None
             Singleton(args)
         if args is not None:
             Singleton.__instance.args = args
         return Singleton.__instance
 
-    # destructor
-    def __del__(self):
-        if self.args.master:
-            if self.port_file_exists():
-                Path(self.get_port_file_name()[1]).unlink()
+    def setup_logging(self):
+        if self.args.master_only:
+            handler = RotatingFileHandler(os.path.join(self.basepath, '.master_log.txt'), maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
+            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
+                                handlers=[handler])
+        # set logging file
+        elif self.args.debug:
+            # create rotating file handler
+            handler = RotatingFileHandler(os.path.expanduser('~') + '/.nodeocc_log.txt', maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
+            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
+                                handlers=[handler])
+
+    def clean_port_files(self):
+        nodename = socket.getfqdn().split('.')[0]
+        for f in os.listdir(self.basepath):
+            if nodename in f and 'master_' in f and f.endswith('.portfile') and is_file_writable_byall(os.path.join(self.basepath, f)):
+                # read pid from file
+                pid = Path(os.path.join(self.basepath, f)).read_text()
+                # assert no process is running
+                if psutil.pid_exists(int(pid)):
+                    self.log(f"Process {pid} is still running, killing self")
+                    return False
+
+                os.system(f"rm {os.path.join(self.basepath, f)}")
+        return True
 
     def __init__(self, args=None):
         """ Virtually private constructor. """
@@ -76,6 +110,10 @@ class Singleton:
             raise Exception("This class is a singleton!")
         else:
             Singleton.__instance = self
+
+        self.args = args
+        self.setup_logging()
+
         self.try_open_counter = 0
         self.voff = 0
         self.mouse_state = {}
@@ -87,7 +125,6 @@ class Singleton:
         self.fetch_fn = None
         self.view_mode = 'gpu'
         self.job_id_type = 'agg'
-        self.args = args
 
         self.show_account = False
         self.show_prio = False
@@ -106,57 +143,36 @@ class Singleton:
 
         self.basepath = self.args.basepath
 
-        if self.args.daemon_only:
-            handler = RotatingFileHandler(os.path.join(self.basepath, '.master_log.txt'), maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
-            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
-                                handlers=[handler])
-        # set logging file
-        elif self.args.debug:
-            # create rotating file handler
-            handler = RotatingFileHandler(os.path.expanduser('~') + '/.nodeocc_log.txt', maxBytes=5 * 1024 * 1024, backupCount=2, mode='w')
-            logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
-                                handlers=[handler])
+        self.is_master = not self.check_existing_master_running()
 
-        if self.args.master:
-            # check if any .port file exists
-            if self.port_file_exists():
-                if self.args.force_override:
-                    _, port_filepath = self.get_port_file_name()
-
-                    # read pid from file
-                    pid = Path(port_filepath).read_text()
-                    # kill process
-                    try:
-                        os.kill(int(pid), signal.SIGTERM)
-                    except Exception as e:
-                        self.log("Could not kill process, deleting port file")
-                        self.log(e)
-
-                    # delete port file
-                    Path(port_filepath).unlink()
-                else:
-                    raise Exception("Master already running")
+        if self.is_master:
             self.port = self.create_socket_as_master()
         else:
             try_open_socket_as_slave(self)
 
-    def get_port_file_name(self):
-        if self.port_file_exists():
-            fname = [f for f in os.listdir(self.basepath) if f.endswith('.port')][0]
-            return fname, os.path.join(self.basepath, fname)
-        return None
-
-    def check_port_file_master(self):
-        if self.port_file_exists():
-            prev_port = int(self.get_port_file_name()[0].split('.')[0])
-            if hasattr(self, 'port'):
-                return self.port == prev_port
+    def check_existing_master_running(self):
+        portfiles = self.get_port_files()
+        if len(portfiles) > 0:
+            for f in portfiles:
+                # check if process is still running
+                pid = Path(f).read_text()
+                if pid and int(pid) != os.getpid():
+                    return psutil.pid_exists(int(pid))
         return False
 
-    def port_file_exists(self):
-        return len([f for f in os.listdir(self.basepath) if f.endswith('.port')]) > 0
+    def get_port_files(self):
+        """
+        Check if a port file exists in the basepath and the file has 666 permissions
+        """
+        nodename = socket.getfqdn().split('.')[0]
+        portfiles = [os.path.join(self.basepath, f) for f in os.listdir(self.basepath)
+                     if f.endswith('.portfile') and 'master_' in f and nodename in f]
+        portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
+        return portfiles
 
     def create_socket_as_master(self):
+        nodename = socket.getfqdn().split('.')[0]
+
         # create udp socket for broadcasting
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 
@@ -174,8 +190,26 @@ class Singleton:
         # get pid of current process
         self.pid = os.getpid()
 
-        # create file to store port
-        Path(self.basepath, f'{self.port}.port').write_text(str(self.pid))
+        # clean up old port files
+        kill_ok = self.clean_port_files()
+        if not kill_ok:
+            return None
+
+        try:
+            # create file to store port with 666 permissions to file
+            filepath = Path(self.basepath, f'{nodename}_master_{self.port}.portfile')
+            filepath.write_text(str(self.pid))
+            os.chmod(filepath, 0o666)
+
+            self.port_filepath = filepath
+        except Exception as e:
+            self.err(f"Could not create port file: {e}")
+            self.err(traceback.format_exc())
+            # check if file exists
+            if filepath.exists():
+                # delete file
+                os.system(f"rm {filepath}")
+            return None
 
         return self.port
 
@@ -213,11 +247,11 @@ class Singleton:
             self._ctime = _ntime
 
     def err(self, msg):
-        if self.args.debug or self.args.daemon_only:
+        if self.args.debug or self.args.master_only:
             logging.error(msg)
 
     def log(self, msg):
-        if self.args.debug or self.args.daemon_only:
+        if self.args.debug or self.args.master_only:
             logging.info(msg)
 
     async def fetch(self):
@@ -225,12 +259,14 @@ class Singleton:
 
         if self.fetch_fn is not None:
             inf, jobs, avg_wait_time = await self.fetch_fn()  # a_filter_values[self.a_filter])
+            master_dead = inf is None
             self.inf = inf if inf is not None else self.inf
             self.jobs = jobs if jobs is not None else self.jobs
             self.avg_wait_time = avg_wait_time if avg_wait_time is not None else self.avg_wait_time
 
         _delta_t = time.time() - _ctime
         self.log(f"Fetch took {_delta_t:.2f} seconds")
+        return master_dead
 
     def add_button(self, y, x, width, action):
         if y not in self.mouse_state:
@@ -514,10 +550,28 @@ def get_char_async(stdscr, instance):
     os.kill(os.getpid(), signal.SIGINT)
 
 
-async def update_screen_info(stdscr, instance):
+async def update_screen_info(stdscr, instance: Singleton):
     while instance.k not in BUTTON_ACTIONS['quit']:
-        await instance.fetch()
-        instance.log("GOT DATA FROM MASTER")
+        master_dead = await instance.fetch()
+        if not master_dead:
+            instance.log("GOT DATA FROM MASTER")
+        else:
+            if not instance.check_existing_master_running():
+                random_wait_time_ms = random.randint(100, 10000)
+                instance.log("MASTER DEAD, WAITING " + str(random_wait_time_ms) + "ms")
+
+                # WARNING: Possible race-condition here, if master dies and slave tries to become master
+                await asyncio.sleep(random_wait_time_ms / 1000)
+                if not instance.check_existing_master_running():
+                    instance.log("MASTER STILL DEAD, TRYING TO BECOME MASTER")
+                    instance.setup_logging()
+                    instance.port = instance.create_socket_as_master()
+                    instance.is_master = True
+                else:
+                    try_open_socket_as_slave(instance)
+            else:
+                try_open_socket_as_slave(instance)
+
         update_screen(stdscr, instance)
 
 
@@ -592,7 +646,13 @@ async def main(stdscr):
 
     def exit_handler(sig, frame):
         instance.log(f"FORCED EXIT...")
-        instance.sock.close()
+        # instance.cleanup()
+        if hasattr(instance, 'port_filepath'):
+            os.system(f"rm {instance.port_filepath}")
+
+        if hasattr(instance, 'sock'):
+            instance.sock.close()
+
         exit(0)
     signal.signal(signal.SIGINT, exit_handler)
 
