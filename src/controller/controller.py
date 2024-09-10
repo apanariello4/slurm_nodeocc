@@ -38,15 +38,15 @@ try:
     import requests
     newest_version = json.loads(requests.get(url).text)['info']['version']
     print(BBLUE, end='')
-    if newest_version.split('.')[0] > version_number.split('.')[0]:
+    if int(newest_version.split('.')[0]) > int(version_number.split('.')[0]):
         print(f"New major version available: {newest_version} (current: {version_number})")
         print(f"Please update with 'pip install {program_name} --upgrade'")
         time.sleep(7)
-    elif newest_version.split('.')[1] > version_number.split('.')[1]:
+    elif int(newest_version.split('.')[1]) > int(version_number.split('.')[1]):
         print(f"New minor version available: {newest_version} (current: {version_number})")
         print(f"Please update with 'pip install {program_name} --upgrade'")
         time.sleep(7)
-    elif newest_version.split('.')[2] > version_number.split('.')[2]:
+    elif int(newest_version.split('.')[2]) > int(version_number.split('.')[2]):
         print(f"New patch version available: {newest_version} (current: {version_number})")
         print(f"Please update with 'pip install {program_name} --upgrade'")
         time.sleep(7)
@@ -134,7 +134,7 @@ def update_data_master(instance):
     queue_jobs = [j.to_nested_dict() for j in jobs if j.state != 'R' and j.state != 'CG']
     queue_jobs = sorted(queue_jobs, key=lambda x: x['priority'], reverse=True)
     maxlen = min(JOB_LIMIT_PER_MSG, len(running_jobs) + len(queue_jobs))
-    
+
     queue_jobs, extra_queue_jobs = queue_jobs[:maxlen - len(running_jobs)], queue_jobs[maxlen - len(running_jobs):]
     cur_timestamp = time.time()
     msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs, 'ts': str(cur_timestamp)})
@@ -186,20 +186,20 @@ async def get_data_slave(instance):
             while n_msgs_remaining>0:
                 data, _ = instance.sock.recvfrom(MAX_BUF)
                 back_msg_idx = int(data.decode('utf-8').split(EXTRA_MSG_BEGIN_DELIM)[0])
-                msg_idx = total_msg_n - back_msg_idx - 1 
+                msg_idx = total_msg_n - back_msg_idx - 1
                 _, new_jobs, _, new_ts = decode_msg_slave(data, delim=EXTRA_MSG_BEGIN_DELIM)
 
                 # check if timestamp is the same
                 if float(new_ts['ts']) != orig_timestamp:
                     instance.timeme(f"Timestamp mismatch, skipping")
                     return inf, jobs, avg_wait_time # return what we have
-                
+
                 msg_store[msg_idx] += new_jobs
 
                 n_msgs_remaining -= 1
                 instance.timeme(f"- extra receive, {n_msgs_remaining} remaining")
 
-            # sort and merge 
+            # sort and merge
             for msg_idx in range(total_msg_n):
                 if len(msg_store[msg_idx]) == 0:
                     instance.log(f"Empty message {msg_idx}")
