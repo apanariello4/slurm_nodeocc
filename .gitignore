@@ -141,3 +141,4 @@ cython_debug/
 .master_log*
 *.port
 .pypirc
+*portfile

@@ -331,7 +331,7 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
                         count = 0
                     if c is not None:
                         jobsplit[-1] += stylefn(c, i)
-                    elif node_status is not None:
+                    elif node_status is not None and i != gpu_occ:
                         jobsplit[-1] += stylefn(node_status, i)
                     else:
                         jobsplit[-1] += i
