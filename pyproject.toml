@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nodeocc"
-version = "1.0.14"
+version = "1.0.15"
 authors = [{ name = "Matteo Boschini" }]
 maintainers = [{ name = "Lorenzo Bonicelli" }, { name = "Aniello Panariello" }]
 description = "TUI application for viewing the status of GPU allocations on a Slurm cluster"

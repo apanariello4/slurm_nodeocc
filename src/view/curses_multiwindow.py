@@ -24,7 +24,7 @@ BUTTON_ACTIONS = {
     'right_1': [ord('d'), curses.KEY_RIGHT, ord('l')],
     'up_tab': [curses.KEY_NPAGE],
     'down_tab': [curses.KEY_PPAGE],
-    'quit': [ord('q'), 'q'],
+    'quit': [ord('q'), 'q', 27],  # 27 is ESC
     'sort_prio': [ord('S')],
     'res_view_mode': [ord('g')],
     'job_id_type': [ord('b')],
@@ -403,7 +403,7 @@ def handle_keys(stdscr, instance):
     elif k in BUTTON_ACTIONS['sort_prio']:
         instance.sort_by_prio = not instance.sort_by_prio
     elif k in BUTTON_ACTIONS['res_view_mode']:
-        instance.view_mode = {"gpu": "ram", "ram": "cpu", "cpu": "gpu"}[instance.view_mode]
+        instance.view_mode = {"gpu": "ram", "ram": "cpu", "cpu": "gpu", "info": "gpu"}[instance.view_mode]
         instance.right_width = 33 if instance.view_mode != 'info' else 39
         stdscr.clear()
     elif k in BUTTON_ACTIONS['job_id_type']:
@@ -446,7 +446,7 @@ def update_screen(stdscr, instance):
         totsize += 10
     if instance.show_prio:
         totsize += 8
-    totsize += 10  # from /etc/update-motd.d/02-wait-times
+    # totsize += 10  # from /etc/update-motd.d/02-wait-times
 
     if columns < totsize:
         stdscr.addstr(1, 1, "MINIMUM TERM. WIDTH")
@@ -532,7 +532,7 @@ def update_screen(stdscr, instance):
     instance.add_button(lines - 1, xoffset + 50 + 2, '[T:ACCOUNT]', BUTTON_ACTIONS['show_account'][0])
 
     # get slurm user partition
-    stdscr.addstr(lines - 1, xoffset + 62 + 2, f'(Avg time {instance.avg_wait_time})', curses.color_pair(2))
+    # stdscr.addstr(lines - 1, xoffset + 62 + 2, f'(Avg time {instance.avg_wait_time})', curses.color_pair(2))
 
     signature = instance.signature if instance.updated else f'{instance.version} -> {instance.newest_version}'
     stdscr.addstr(lines - 1, columns - 2 - len(signature), signature, curses.color_pair(2) if instance.updated else curses.color_pair(3))

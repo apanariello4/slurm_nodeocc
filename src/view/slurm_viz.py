@@ -111,6 +111,33 @@ def get_cpu_block(cpus):
     return cpus // cpu_size
 
 
+def get_node_status(node, jobs):
+    ram_occs = 0
+    cpu_occs = 0
+    for j in sorted(jobs, key=lambda x: (x.partition, x.user)):
+        for jj in j.joblets:
+            if node.name == jj.node:
+                ram_occs += jj.mem
+                cpu_occs += jj.cpus
+
+    node_total_ram = node.mem
+    node_total_cpus = node.cpus
+
+    # compute the usage percentage for both ram and cpu
+    ram_usage = (ram_occs / node_total_ram)
+    cpu_usage = (cpu_occs / node_total_cpus)
+
+    # get worst case usage
+    usage = max(ram_usage, cpu_usage)
+
+    if usage > 0.9:
+        return 'RED'
+    elif usage > 0.7:
+        return 'YELLOW'
+    else:
+        return None  # white?
+
+
 def view_viz(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user=None, mode='gpu'):
     if mode == 'gpu':
         return view_viz_gpu(infrastructure, jobs, work, stylefn, current_user)
@@ -294,6 +321,7 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
 
             joblet_icons = [(ji[0] + (' ' if i != len(joblet_icons) - 1 else ''), ji[1]) for i, ji in enumerate(joblet_icons)]
 
+            node_status = get_node_status(n, jobs)
             jobsplit = [""]
             count = 0
             for ic, c in joblet_icons:
@@ -301,7 +329,12 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
                     if count == gpu_box_chars:
                         jobsplit.append("")
                         count = 0
-                    jobsplit[-1] += stylefn(c, i) if c is not None else i
+                    if c is not None:
+                        jobsplit[-1] += stylefn(c, i)
+                    elif node_status is not None:
+                        jobsplit[-1] += stylefn(node_status, i)
+                    else:
+                        jobsplit[-1] += i
                     count += 1
 
             for i, l in enumerate(jobsplit):
@@ -323,7 +356,8 @@ def view_viz_gpu(infrastructure, jobs, work=True, stylefn=cmdstyle, current_user
             cust_print('')
 
         # print summary
-        cust_print(''.join([' [' + gpu_occ + 'run', gpu_paused + 'hld', gpu_drain + 'drn', gpu_pendr + 'pnd', gpu_down + 'dwn', '()res]']))
+        cust_print(''.join([' [' + gpu_occ + 'run ()resv ', stylefn('YELLOW', gpu_avail) + '>70% ', stylefn('RED', gpu_avail), '>90%]']))
+        cust_print(''.join([' [', gpu_paused + 'hld ', gpu_drain + 'drn ', gpu_pendr + 'pnd ', gpu_down + 'dwn', ']']))
         gpuc = 'RED'
         if infrastructure.gpu_limit_pu > 3:
             gpuc = 'YELLOW'
