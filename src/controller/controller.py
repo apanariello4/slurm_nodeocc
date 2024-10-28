@@ -70,7 +70,7 @@ JOB_LIMIT_PER_MSG = 60
 parser = argparse.ArgumentParser(description='Visualize slurm jobs')
 parser.add_argument('--debug', action='store_true', help='Enable logging')
 parser.add_argument('--master_only', action='store_true', help='Disable all prints - only run in background')
-parser.add_argument('--basepath', type=str, default='/nas/softechict-nas-2/mboschini/cool_scripts/new_nodeocc/', help='Base path for nodeocc. Must be readable by all users')
+parser.add_argument('--basepath', type=str, default='/tmp', help='Base path for nodeocc. Must be readable by all users')
 args = parser.parse_args()
 
 # check basepath is readable
