@@ -98,4 +98,4 @@ class Infrastructure:
         return sorted(self.nodes, key=lambda x: self.prior.index(x.gpu_model.split(',')[0]) if x.gpu_model.split(',')[0] in self.prior else -1)
 
     def get_next_maintenance(self):
-        return sorted(self.maintenances, key=lambda x: to_datetime(x.start_time))[0] if len(self.maintenances) else None
+        return sorted(self.maintenances, key=lambda x: to_datetime(x.get('start_time')))[0] if len(self.maintenances) else None

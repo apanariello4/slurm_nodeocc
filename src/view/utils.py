@@ -38,8 +38,8 @@ def maintenance_status(infrastructure):
     if len(infrastructure.maintenances):
         # time format: '0   2023-12-04 14:00:00\nName: StartTime, dtype: datetime64[ns]'
         next_maintenance = infrastructure.get_next_maintenance()
-        start_time = to_datetime(next_maintenance.start_time)
-        end_time = to_datetime(next_maintenance.end_time)
+        start_time = to_datetime(next_maintenance.get('start_time'))
+        end_time = to_datetime(next_maintenance.get('end_time'))
         time_to_maintenance = (start_time - np.datetime64('now')).astype(float)
         # TODO: fix timezone
         if time_to_maintenance < 0 and (end_time - np.datetime64('now')) > 0:
