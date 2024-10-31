@@ -1,4 +1,3 @@
-import curses
 from . import slurm_list, slurm_viz, styles
 
 

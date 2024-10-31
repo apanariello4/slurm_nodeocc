@@ -1,5 +1,7 @@
 from typing import List
 
+from view.utils import to_datetime
+
 
 class Node:
     """
@@ -34,7 +36,7 @@ class Maintenance:
         self.end_time = end_time
 
     def __repr__(self):
-        return f'RESERVATION {self.start_time} - {self.end_time} on {",".join(self.nodes)}'
+        return f'RESERVATION - From: {self.start_time} To: {self.end_time} on {",".join(self.nodes)}'
 
     @staticmethod
     def from_dict(d):
@@ -94,3 +96,6 @@ class Infrastructure:
     def get_sorted_nodes(self):
 
         return sorted(self.nodes, key=lambda x: self.prior.index(x.gpu_model.split(',')[0]) if x.gpu_model.split(',')[0] in self.prior else -1)
+
+    def get_next_maintenance(self):
+        return sorted(self.maintenances, key=lambda x: to_datetime(x.start_time))[0] if len(self.maintenances) else None
