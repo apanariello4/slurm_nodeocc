@@ -92,16 +92,17 @@ class Singleton:
 
     def clean_port_files(self):
         nodename = socket.getfqdn().split('.')[0]
-        for f in os.listdir(self.basepath):
-            if nodename in f and 'master_' in f and f.endswith('.portfile') and is_file_writable_byall(os.path.join(self.basepath, f)):
+        bp = os.path.join(self.basepath, nodename)
+        for f in os.listdir(bp):
+            if 'master_' in f and f.endswith('.portfile') and is_file_writable_byall(os.path.join(bp, f)):
                 # read pid from file
-                pid = Path(os.path.join(self.basepath, f)).read_text()
+                pid = Path(os.path.join(bp, f)).read_text()
                 # assert no process is running
                 if psutil.pid_exists(int(pid)):
                     self.log(f"Process {pid} is still running, killing self")
                     return False
 
-                os.system(f"rm {os.path.join(self.basepath, f)}")
+                os.system(f"rm {os.path.join(bp, f)}")
         return True
 
     def __init__(self, args=None):
@@ -165,8 +166,9 @@ class Singleton:
         Check if a port file exists in the basepath and the file has 666 permissions
         """
         nodename = socket.getfqdn().split('.')[0]
-        portfiles = [os.path.join(self.basepath, f) for f in os.listdir(self.basepath)
-                     if f.endswith('.portfile') and 'master_' in f and nodename in f]
+        bp = os.path.join(self.basepath, nodename)
+        portfiles = [os.path.join(bp, f) for f in os.listdir(bp)
+                     if f.endswith('.portfile') and 'master_' in f]
         portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
         return portfiles
 
@@ -197,7 +199,11 @@ class Singleton:
 
         try:
             # create file to store port with 666 permissions to file
-            filepath = Path(self.basepath, f'{nodename}_master_{self.port}.portfile')
+            # file is in folder basepath/nodename/master_{port}.portfile
+            bp = os.path.join(self.basepath, nodename)
+            if not os.path.exists(bp):
+                os.makedirs(bp, mode=0o777)
+            filepath = Path(os.path.join(bp, f"master_{self.port}.portfile"))
             filepath.write_text(str(self.pid))
             os.chmod(filepath, 0o666)
 

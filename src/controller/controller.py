@@ -136,7 +136,6 @@ def update_data_master(instance: Singleton):
     queue_jobs = sorted(queue_jobs, key=lambda x: x['priority'], reverse=True)
     maxlen = min(JOB_LIMIT_PER_MSG, len(running_jobs) + len(queue_jobs))
 
-
     queue_jobs, extra_queue_jobs = queue_jobs[:maxlen - len(running_jobs)], queue_jobs[maxlen - len(running_jobs):]
     cur_timestamp = time.time()
     msg = json.dumps({'inf': inf.to_nested_dict(), 'jobs': running_jobs + queue_jobs, 'ts': str(cur_timestamp)})
@@ -195,7 +194,7 @@ async def get_data_slave(instance):
                 # check if timestamp is the same
                 if float(new_ts['ts']) != orig_timestamp:
                     instance.timeme(f"Timestamp mismatch, skipping")
-                    return inf, jobs, avg_wait_time # return what we have
+                    return inf, jobs, avg_wait_time  # return what we have
 
                 msg_store[msg_idx] += new_jobs
 
