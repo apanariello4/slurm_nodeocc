@@ -93,6 +93,8 @@ class Singleton:
     def clean_port_files(self):
         nodename = socket.getfqdn().split('.')[0]
         bp = os.path.join(self.basepath, nodename)
+        if not os.path.exists(bp):
+            return True
         for f in os.listdir(bp):
             if 'master_' in f and f.endswith('.portfile') and is_file_writable_byall(os.path.join(bp, f)):
                 # read pid from file
@@ -167,6 +169,8 @@ class Singleton:
         """
         nodename = socket.getfqdn().split('.')[0]
         bp = os.path.join(self.basepath, nodename)
+        if not os.path.exists(bp):
+            return []
         portfiles = [os.path.join(bp, f) for f in os.listdir(bp)
                      if f.endswith('.portfile') and 'master_' in f]
         portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
