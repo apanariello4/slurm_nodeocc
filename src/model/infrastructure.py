@@ -78,6 +78,8 @@ class Infrastructure:
         for k, v in d.items():
             if k == 'nodes':
                 setattr(i, k, [Node(**n) for n in v])
+            elif k == 'maintenances':
+                setattr(i, k, [Maintenance.from_dict(m) for m in v])
             else:
                 setattr(i, k, v)
         return i
