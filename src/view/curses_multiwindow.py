@@ -205,11 +205,18 @@ class Singleton:
             # create file to store port with 666 permissions to file
             # file is in folder basepath/nodename/master_{port}.portfile
             bp = os.path.join(self.basepath, nodename)
+            created = False
             if not os.path.exists(bp):
+                created = True
                 os.makedirs(bp, mode=0o777)
+
             filepath = Path(os.path.join(bp, f"master_{self.port}.portfile"))
             filepath.write_text(str(self.pid))
             os.chmod(filepath, 0o666)
+
+            # force 777 permissions
+            if created:
+                os.chmod(bp, 0o777)
 
             self.port_filepath = filepath
         except Exception as e:

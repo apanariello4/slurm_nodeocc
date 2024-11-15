@@ -36,7 +36,7 @@ def _match_str_wildcard(s, w):
 
 def _node_from_sinfo(x):
     n = Node(_node_preproc(x['NODELIST']), x.n_gpu, x.m_gpu, x.reserved, None, x.CPUS, x.MEMORY)  # , feature=x.AVAIL_FEATURES)
-    if x['STATE'] == 'drng' or 'drain' in x['STATE']:
+    if 'drng' in x['STATE'] or 'drain' in x['STATE']:
         n.status = 'drain'
     elif x['STATE'].upper() in ('MAINT', 'DOWN', 'DOWN*', 'FAIL', 'FAILING', 'FAIL*') or _match_str_wildcard(x['STATE'].lower(), 'inv*'):
         n.status = 'down'
