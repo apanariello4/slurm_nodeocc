@@ -1,3 +1,4 @@
+import random
 import sys
 import os
 from pathlib import Path
@@ -64,11 +65,13 @@ BEGIN_DELIM = "!{$"
 END_DELIM_ENCODED = "!}$".encode('utf-8')
 EXTRA_MSG_BEGIN_DELIM = "!{#"
 MAX_BUF = 65535
-MAX_MSG_LEN = 1024 * 1024 * 1024
-JOB_LIMIT_PER_MSG = 60
+JOB_LIMIT_PER_MSG = 40
+TIMEOUT_MAX = 3
+n_timeout = 0
 
 parser = argparse.ArgumentParser(description='Visualize slurm jobs')
 parser.add_argument('--debug', action='store_true', help='Enable logging')
+parser.add_argument('--override', action='store_true', help='Enable logging')
 parser.add_argument('--master_only', action='store_true', help='Disable all prints - only run in background')
 parser.add_argument('--basepath', type=str, default='/tmp', help='Base path for nodeocc. Must be readable by all users')
 args = parser.parse_args()
@@ -168,6 +171,7 @@ def decode_msg_slave(data, delim=BEGIN_DELIM):
 
 
 async def get_data_slave(instance):
+    global n_timeout
     inf, jobs, avg_wait_time = None, None, None
     try:
         # listen for data from master
@@ -210,12 +214,18 @@ async def get_data_slave(instance):
             instance.timeme(f"- no data")
             return None, None, None, None
 
+        n_timeout = 0
+
     except BlockingIOError as e:
         pass
 
     except TimeoutError as e:
-        instance.log(f"TIMEOUT")
-        try_open_socket_as_slave(instance)
+        n_timeout += 1
+        instance.log(f"TIMEOUT {n_timeout}/{TIMEOUT_MAX}")
+        if n_timeout > TIMEOUT_MAX:
+            try_open_socket_as_slave(instance, force=True)
+
+        time.sleep(random.randint(100, 10000) / 1000)
 
     return inf, jobs, avg_wait_time
 

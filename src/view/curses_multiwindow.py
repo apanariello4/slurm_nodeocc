@@ -44,7 +44,7 @@ def is_file_readable_byall(file_path):
     return os.stat(file_path).st_mode & stat.S_IROTH
 
 
-def try_open_socket_as_slave(instance):
+def try_open_socket_as_slave(instance, force=False):
     if len(instance.get_port_files()) == 0:
         raise Exception("No master running")
 
@@ -57,7 +57,7 @@ def try_open_socket_as_slave(instance):
             instance.log(f"- MASTER HAS CHANGED PORT: {instance.port} vs {cur_port}")
 
     instance.port = cur_port
-    instance._open_socket_as_slave(instance.port)
+    instance._open_socket_as_slave(instance.port, force=force)
 
     if instance.try_open_counter > 5:
         instance.err(f"Could not open socket as slave on port {instance.port}")
@@ -90,7 +90,7 @@ class Singleton:
             logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s', datefmt='%d-%b-%y %H:%M:%S',
                                 handlers=[handler])
 
-    def clean_port_files(self):
+    def clean_port_files(self, force=False):
         nodename = socket.getfqdn().split('.')[0]
         bp = os.path.join(self.basepath, nodename)
         if not os.path.exists(bp):
@@ -100,7 +100,7 @@ class Singleton:
                 # read pid from file
                 pid = Path(os.path.join(bp, f)).read_text()
                 # assert no process is running
-                if psutil.pid_exists(int(pid)):
+                if psutil.pid_exists(int(pid)) and not force:
                     self.log(f"Process {pid} is still running, killing self")
                     return False
 
@@ -148,8 +148,8 @@ class Singleton:
 
         self.is_master = not self.check_existing_master_running()
 
-        if self.is_master:
-            self.port = self.create_socket_as_master()
+        if self.is_master or args.override:
+            self.port = self.create_socket_as_master(force=args.override)
         else:
             try_open_socket_as_slave(self)
 
@@ -176,28 +176,14 @@ class Singleton:
         portfiles = [f for f in portfiles if is_file_readable_byall(f) and is_file_writable_byall(f)]
         return portfiles
 
-    def create_socket_as_master(self):
+    def update_port_file(self, force=False):
         nodename = socket.getfqdn().split('.')[0]
-
-        # create udp socket for broadcasting
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        # Enable broadcasting mode
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-
-        self.sock.bind(('', 0))
-
-        self.port = self.sock.getsockname()[1]
-        self.sock.settimeout(2)
-        self.log(f"Socket created as master on port {self.port}")
 
         # get pid of current process
         self.pid = os.getpid()
 
         # clean up old port files
-        kill_ok = self.clean_port_files()
+        kill_ok = self.clean_port_files(force=force)
         if not kill_ok:
             return None
 
@@ -228,9 +214,26 @@ class Singleton:
                 os.system(f"rm {filepath}")
             return None
 
+    def create_socket_as_master(self, force=False):
+        # create udp socket for broadcasting
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        # Enable broadcasting mode
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+        self.sock.bind(('', 0))
+
+        self.port = self.sock.getsockname()[1]
+        self.sock.settimeout(2)
+        self.log(f"Socket created as master on port {self.port}")
+
+        self.update_port_file(force=force)
+
         return self.port
 
-    def _open_socket_as_slave(self, port):
+    def _open_socket_as_slave(self, port, force=False):
         try:
             # create udp socket for broadcasting
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
@@ -244,6 +247,8 @@ class Singleton:
 
             self.sock.settimeout(6.5)
             self.log(f"Socket opened on port {self.port}")
+
+            self.update_port_file(force=force)
 
             self.try_open_counter = 0
             return self.port
